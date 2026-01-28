@@ -158,18 +158,39 @@ class PointCloudData(Dataset):
 class PointMLP(nn.Module):
     def __init__(self, classes=40):
         super().__init__()
-        self.flatten = nn.Flatten(start_dim=1)
 
-        self.fc1 = nn.Linear(3072, 512)
-        self.bn1 = nn.BatchNorm1d(512)
+        self.conv1 = nn.Conv1d(3, 64,1)
+        self.bn1 = nn.BatchNorm1d(64)
         self.act1 = nn.ReLU()
 
-        self.fc2 = nn.Linear(512, 256)
-        self.bn2 = nn.BatchNorm1d(256)
+        self.conv2 = nn.Conv1d(64, 64,1)
+        self.bn2 = nn.BatchNorm1d(64)
         self.act2 = nn.ReLU()
-        self.drop = nn.Dropout(0.3)
+        
+        self.conv3 = nn.Conv1d(64, 64,1)
+        self.bn3 = nn.BatchNorm1d(64)
+        self.act3 = nn.ReLU()
 
-        self.fc3 = nn.Linear(256, classes)
+        self.conv4 = nn.Conv1d(64, 128,1)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.act4 = nn.ReLU()       
+
+        self.conv5 = nn.Conv1d(128, 1024,1)
+        self.bn5 = nn.BatchNorm1d(1024)
+        self.act5 = nn.ReLU()
+
+        self.maxpool5 = nn.MaxPool1d(1024)
+
+        self.conv6 = nn.Conv1d(1024, 512,1)
+        self.bn6 = nn.BatchNorm1d(512)
+        self.act6 = nn.ReLU()
+
+        self.conv7 = nn.Conv1d(512, 256,1)
+        self.bn7 = nn.BatchNorm1d(512)
+        self.act7 = nn.ReLU()
+        self.drop7 = nn.Dropout(0.3)
+
+        self.conv8 = nn.Conv1d(256, classes,1)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
 
@@ -197,8 +218,20 @@ class PointMLP(nn.Module):
 class PointNetBasic(nn.Module):
     def __init__(self, classes=40):
         super().__init__()
-        # YOUR CODE
-        pass
+        # input = data[pointcloud] et pointcould = ( B,N, 3)
+        self.flatten = nn.Flatten(start_dim=1)
+
+        self.fc1 = nn.Linear(3072, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.act1 = nn.ReLU()
+
+        self.fc2 = nn.Linear(512, 256)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.act2 = nn.ReLU()
+        self.drop = nn.Dropout(0.3)
+
+        self.fc3 = nn.Linear(256, classes)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
 
     def forward(self, input):
         # YOUR CODE
