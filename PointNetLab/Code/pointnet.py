@@ -158,6 +158,44 @@ class PointCloudData(Dataset):
 class PointMLP(nn.Module):
     def __init__(self, classes=40):
         super().__init__()
+        self.flatten = nn.Flatten(start_dim=1)
+
+        self.fc1 = nn.Linear(3072, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.act1 = nn.ReLU()
+
+        self.fc2 = nn.Linear(512, 256)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.act2 = nn.ReLU()
+        self.drop = nn.Dropout(0.3)
+
+        self.fc3 = nn.Linear(256, classes)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
+
+
+    def forward(self, input):
+
+        x = self.flatten(input)
+
+        x = self.fc1(x)
+        x = self.bn1(x)
+        x = self.act1(x)
+
+        x = self.fc2(x)
+        x = self.bn2(x)
+        x = self.act2(x)
+        x = self.drop(x)
+
+        x = self.fc3(x)
+        x = self.logsoftmax(x)
+
+        return x
+        
+
+
+class PointNetBasic(nn.Module):
+    def __init__(self, classes=40):
+        super().__init__()
 
         self.conv1 = nn.Conv1d(3, 64,1)
         self.bn1 = nn.BatchNorm1d(64)
@@ -181,83 +219,207 @@ class PointMLP(nn.Module):
 
         self.maxpool5 = nn.MaxPool1d(1024)
 
-        self.conv6 = nn.Conv1d(1024, 512,1)
+        self.fc6 = nn.Linear(1024, 512)
         self.bn6 = nn.BatchNorm1d(512)
         self.act6 = nn.ReLU()
 
-        self.conv7 = nn.Conv1d(512, 256,1)
-        self.bn7 = nn.BatchNorm1d(512)
+        self.fc7 = nn.Linear(512, 256)
+        self.bn7 = nn.BatchNorm1d(256)
         self.act7 = nn.ReLU()
         self.drop7 = nn.Dropout(0.3)
 
-        self.conv8 = nn.Conv1d(256, classes,1)
+        self.fc8 = nn.Linear(256, classes)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
 
     def forward(self, input):
 
-        x = self.flatten(input)
-
-        x = self.fc1(x)
+        x = self.conv1(input)
         x = self.bn1(x)
         x = self.act1(x)
 
-        x = self.fc2(x)
+        x = self.conv2(x)
         x = self.bn2(x)
         x = self.act2(x)
-        x = self.drop(x)
 
-        x = self.fc3(x)
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.act3(x)
+
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.act4(x)
+
+        x = self.conv5(x)
+        x = self.bn5(x)
+        x = self.act5(x)
+
+        x = self.maxpool5(x)
+        x = x.squeeze(-1)
+
+        x = self.fc6(x)
+        x = self.bn6(x)
+        x = self.act6(x)
+
+        x = self.fc7(x)
+        x = self.bn7(x)
+        x = self.act7(x)
+        x = self.drop7(x)
+
+        x = self.fc8(x)
         x = self.logsoftmax(x)
-
         return x
 
-        
-
-
-class PointNetBasic(nn.Module):
-    def __init__(self, classes=40):
-        super().__init__()
-        # input = data[pointcloud] et pointcould = ( B,N, 3)
-        self.flatten = nn.Flatten(start_dim=1)
-
-        self.fc1 = nn.Linear(3072, 512)
-        self.bn1 = nn.BatchNorm1d(512)
-        self.act1 = nn.ReLU()
-
-        self.fc2 = nn.Linear(512, 256)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.act2 = nn.ReLU()
-        self.drop = nn.Dropout(0.3)
-
-        self.fc3 = nn.Linear(256, classes)
-        self.logsoftmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, input):
-        # YOUR CODE
-        pass
 
 
 class Tnet(nn.Module):
     def __init__(self, k=3):
         super().__init__()
-        # YOUR CODE
-        pass
 
-    def forward(self, input):
-        # YOUR CODE
-        pass
+        self.k = k
 
+        self.conv1 = nn.Conv1d(3, 64,1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.act1 = nn.ReLU()
+
+        self.conv2 = nn.Conv1d(64, 128,1)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.act2 = nn.ReLU()       
+
+        self.conv3 = nn.Conv1d(128, 1024,1)
+        self.bn3 = nn.BatchNorm1d(1024)
+        self.act3 = nn.ReLU()
+
+        self.maxpool3 = nn.MaxPool1d(1024)
+
+        self.fc4 = nn.Linear(1024, 512)
+        self.bn4 = nn.BatchNorm1d(512)
+        self.act4 = nn.ReLU()
+
+        self.fc5 = nn.Linear(512, 256)
+        self.bn5 = nn.BatchNorm1d(256)
+        self.act5 = nn.ReLU()
+
+        self.fc6 = nn.Linear(256, k*k)
+
+
+    def forward(self, input,):
+
+        x = self.conv1(input)
+        x = self.bn1(x)
+        x = self.act1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.act2(x)
+
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.act3(x)
+
+        x = self.maxpool3(x)
+        x = x.squeeze(-1)
+
+        x = self.fc4(x)
+        x = self.bn4(x)
+        x = self.act4(x)
+
+        x = self.fc5(x)
+        x = self.bn5(x)
+        x = self.act5(x)
+
+        x = self.fc6(x)
+        x = x.reshape(x.size(0),self.k,self.k)
+
+        I = torch.eye(self.k, device=x.device, dtype=x.dtype)
+        I = I.unsqueeze(0)
+        I = I.repeat(x.size(0),1,1)
+        x = x + I
+
+        return x
 
 class PointNetFull(nn.Module):
-    def __init__(self, classes=40):
+    def __init__(self, classes=40, tnet1, tnet2):
         super().__init__()
-        # YOUR CODE
-        pass
+
+        self.tnet1 = tnet1
+        self.tnet2 = tnet2
+
+        self.conv1 = nn.Conv1d(3, 64,1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.act1 = nn.ReLU()
+
+        self.conv2 = nn.Conv1d(64, 64,1)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.act2 = nn.ReLU()
+        
+        self.conv3 = nn.Conv1d(64, 64,1)
+        self.bn3 = nn.BatchNorm1d(64)
+        self.act3 = nn.ReLU()
+
+        self.conv4 = nn.Conv1d(64, 128,1)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.act4 = nn.ReLU()       
+
+        self.conv5 = nn.Conv1d(128, 1024,1)
+        self.bn5 = nn.BatchNorm1d(1024)
+        self.act5 = nn.ReLU()
+
+        self.maxpool5 = nn.MaxPool1d(1024)
+
+        self.fc6 = nn.Linear(1024, 512)
+        self.bn6 = nn.BatchNorm1d(512)
+        self.act6 = nn.ReLU()
+
+        self.fc7 = nn.Linear(512, 256)
+        self.bn7 = nn.BatchNorm1d(256)
+        self.act7 = nn.ReLU()
+        self.drop7 = nn.Dropout(0.3)
+
+        self.fc8 = nn.Linear(256, classes)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
+
 
     def forward(self, input):
-        # YOUR CODE
-        pass
+
+        x = x @ self.tnet1
+        x = self.conv1(input)
+        x = self.bn1(x)
+        x = self.act1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.act2(x)
+
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.act3(x)
+
+        x = x @ self.tnet2
+
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.act4(x)
+
+        x = self.conv5(x)
+        x = self.bn5(x)
+        x = self.act5(x)
+
+        x = self.maxpool5(x)
+        x = x.squeeze(-1)
+
+        x = self.fc6(x)
+        x = self.bn6(x)
+        x = self.act6(x)
+
+        x = self.fc7(x)
+        x = self.bn7(x)
+        x = self.act7(x)
+        x = self.drop7(x)
+
+        x = self.fc8(x)
+        x = self.logsoftmax(x)
+        return x
 
 
 def basic_loss(outputs, labels):
@@ -390,9 +552,15 @@ if __name__ == '__main__':
     train_loader = DataLoader(dataset=train_ds, batch_size=32, shuffle=True)
     test_loader = DataLoader(dataset=test_ds, batch_size=32)
 
-    model = PointMLP()
-    # model = PointNetBasic()
-    # model = PointNetFull()
+
+
+    Tnet1 = Tnet(k=3)
+    Tnet2 = Tnet(k=64)
+
+    # model = PointMLP(classes=10)
+    model = PointNetBasic(classes=10)
+    # model = PointNetFull(classes=10, tnet1=Tnet1, tnet2 =Tnet2)
+
 
     # Récupère uniquement les paramètres "entraînables" du modèle :
     # model.parameters() parcourt tous les poids/biais ; requires_grad=True => ils seront mis à jour par backprop
