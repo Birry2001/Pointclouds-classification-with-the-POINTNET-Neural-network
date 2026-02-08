@@ -1,0 +1,7 @@
+Device: cuda:0
+Output directory: /home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260208_102112
+Running 10 experiments
+
+=== [1/10] baseline ===
+[baseline] Epoch 01/25 train_loss=1.0703 train_acc=62.74% val_loss=0.8735 val_acc=66.41% time=265.68s
+[baseline] Epoch 02/25 train_loss=0.7154 train_acc=75.42% val_loss=0.8891 val_acc=63.77% time=264.44s
