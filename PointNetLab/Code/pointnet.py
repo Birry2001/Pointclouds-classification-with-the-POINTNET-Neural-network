@@ -8,6 +8,7 @@ import numpy as np
 import random
 import math
 import os
+import sys
 import time
 import torch
 import scipy.spatial.distance
@@ -16,7 +17,12 @@ from torchvision import transforms, utils
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Import functions to read and write ply files
+# Import functions to read and write ply files.
+# Force local module resolution to avoid conflict with the external "ply" package.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR in sys.path:
+    sys.path.remove(_THIS_DIR)
+sys.path.insert(0, _THIS_DIR)
 from ply import write_ply, read_ply
 
 # Classe pour la realisation de la rotation des pointclouds suivant l'axe z
@@ -278,7 +284,7 @@ class Tnet(nn.Module):
 
         self.k = k
 
-        self.conv1 = nn.Conv1d(3, 64,1)
+        self.conv1 = nn.Conv1d(k, 64,1)
         self.bn1 = nn.BatchNorm1d(64)
         self.act1 = nn.ReLU()
 
@@ -339,7 +345,7 @@ class Tnet(nn.Module):
         return x
 
 class PointNetFull(nn.Module):
-    def __init__(self, classes=40, tnet1, tnet2):
+    def __init__(self, tnet1, tnet2, classes=40 ):
         super().__init__()
 
         self.tnet1 = tnet1
@@ -382,8 +388,9 @@ class PointNetFull(nn.Module):
 
     def forward(self, input):
 
-        x = x @ self.tnet1
-        x = self.conv1(input)
+        m3x3 = self.tnet1(input)
+        x = torch.bmm(m3x3, input)
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.act1(x)
 
@@ -395,7 +402,8 @@ class PointNetFull(nn.Module):
         x = self.bn3(x)
         x = self.act3(x)
 
-        x = x @ self.tnet2
+        m64x64 = self.tnet2(x)
+        x = torch.bmm(m64x64, x)
 
         x = self.conv4(x)
         x = self.bn4(x)
@@ -558,8 +566,8 @@ if __name__ == '__main__':
     Tnet2 = Tnet(k=64)
 
     # model = PointMLP(classes=10)
-    model = PointNetBasic(classes=10)
-    # model = PointNetFull(classes=10, tnet1=Tnet1, tnet2 =Tnet2)
+    # model = PointNetBasic(classes=10)
+    model = PointNetFull(classes=10, tnet1=Tnet1, tnet2 =Tnet2)
 
 
     # Récupère uniquement les paramètres "entraînables" du modèle :
