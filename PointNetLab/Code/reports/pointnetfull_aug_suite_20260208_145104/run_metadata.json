@@ -1,0 +1,30 @@
+{
+  "timestamp": "20260208_145104",
+  "device": "cuda:0 (NVIDIA GeForce MX110)",
+  "device_kind": "cuda",
+  "device_policy": "auto",
+  "device_probe": {
+    "cpu": {
+      "available": "yes",
+      "name": "CPU"
+    },
+    "cuda": {
+      "available": "yes",
+      "name": "NVIDIA GeForce MX110"
+    },
+    "tpu": {
+      "available": "no",
+      "name": "n/a"
+    }
+  },
+  "data_root": "/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/data/ModelNet10_PLY",
+  "epochs": 25,
+  "batch_size": 32,
+  "num_workers": 0,
+  "seed": 42,
+  "num_experiments": 10,
+  "summary_csv": "/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260208_145104/experiment_summary.csv",
+  "summary_json": "/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260208_145104/experiment_summary.json",
+  "summary_notebook": "/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260208_145104/notebooks/01_pointnetfull_augmentation_summary.ipynb",
+  "details_notebook": "/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260208_145104/notebooks/02_pointnetfull_augmentation_detailed_logs.ipynb"
+}

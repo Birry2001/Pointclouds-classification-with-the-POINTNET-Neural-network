@@ -1,79 +1,110 @@
-# Colab Quickstart - PointNetFull Augmentation Suite
+# Colab Quickstart - PointNetFull Robust Benchmark
 
-Ce guide te permet de lancer la campagne automatisée sur Google Colab (GPU) en gardant tous les résultats sur Google Drive.
+This guide runs the new robust protocol:
+- multi-seeds,
+- early stopping,
+- optional normalization,
+- optional sweep mode,
+- auto device selection (`TPU > GPU > CPU`).
 
-## 1) Monter Google Drive
+## 1) Mount Drive
 
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
 ```
 
-## 2) Aller dans ton projet
-
-Adapte ce chemin si ton dossier n'a pas le même nom dans Drive.
+## 2) Go to project
 
 ```python
-%cd /content/drive/MyDrive/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code
+%cd /content/drive/MyDrive/M2_PAR/Apprentissage/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code
 ```
 
-## 3) Vérifier GPU
+## 3) Probe devices
 
 ```python
-import torch
-print(torch.__version__)
-print("CUDA:", torch.cuda.is_available())
-if torch.cuda.is_available():
-    print("GPU:", torch.cuda.get_device_name(0))
+!python run_pointnetfull_augmentation_suite.py --probe-devices
 ```
 
-## 4) Lancer la campagne complète (25 epochs/config)
+## 4) Check dataset path
 
-Le script crée automatiquement un dossier `reports/pointnetfull_aug_suite_YYYYMMDD_HHMMSS`,
-donc les campagnes précédentes ne sont jamais écrasées.
+```python
+DATA_ROOT="/content/drive/MyDrive/M2_PAR/Apprentissage/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/data/ModelNet10_PLY"
+!find "$DATA_ROOT" -type f -iname "*.ply" | head -n 20
+!find "$DATA_ROOT" -type f -iname "*.ply" | wc -l
+```
+
+## 5) Robust benchmark (recommended)
+
+Example requested setup:
+- experiments: baseline, plus_jitter, plus_occlusion, combo_full
+- seeds: 0,1,2
+- epochs max: 150
+- early stopping patience: 15
 
 ```python
 !python -u run_pointnetfull_augmentation_suite.py \
-  --data-root /content/drive/MyDrive/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/data/ModelNet10_PLY \
-  --epochs 25 \
-  --batch-size 32 \
-  --num-workers 2
-```
-
-## 5) (Optionnel) Lancer en arrière-plan + log fichier
-
-Utile si tu veux laisser tourner la cellule sans tout afficher.
-
-```python
-%%bash
-set -e
-mkdir -p reports/logs
-LOG="reports/logs/pointnetfull_aug_suite_colab_$(date +%Y%m%d_%H%M%S).log"
-echo "LOG=$LOG"
-nohup python -u run_pointnetfull_augmentation_suite.py \
-  --data-root /content/drive/MyDrive/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/data/ModelNet10_PLY \
-  --epochs 25 \
-  --batch-size 32 \
+  --mode benchmark \
+  --experiments baseline plus_jitter plus_occlusion combo_full \
+  --seeds 0 1 2 \
+  --epochs-max 150 \
+  --early-stop-monitor val_acc \
+  --early-stop-patience 15 \
+  --batch-size 16 \
   --num-workers 2 \
-  > "$LOG" 2>&1 &
-echo "PID=$!"
+  --normalize-unit-sphere true \
+  --use-scheduler true \
+  --device auto \
+  --make-plots true \
+  --make-error-analysis true \
+  --make-gallery false \
+  --data-root "$DATA_ROOT"
 ```
 
-Puis suivre le log:
+## 6) Sweep mode examples
 
 ```python
-!tail -n 60 reports/logs/<TON_LOG>.log
+!python -u run_pointnetfull_augmentation_suite.py \
+  --mode sweep --sweep jitter \
+  --seeds 0 1 2 \
+  --epochs-max 80 \
+  --batch-size 16 \
+  --device auto \
+  --data-root "$DATA_ROOT"
 ```
 
-## 6) Où récupérer les résultats
+```python
+!python -u run_pointnetfull_augmentation_suite.py \
+  --mode sweep --sweep occlusion \
+  --seeds 0 1 2 \
+  --epochs-max 80 \
+  --batch-size 16 \
+  --device auto \
+  --data-root "$DATA_ROOT"
+```
 
-Dans le dossier de run généré:
+```python
+!python -u run_pointnetfull_augmentation_suite.py \
+  --mode sweep --sweep dropout \
+  --seeds 0 1 2 \
+  --epochs-max 80 \
+  --batch-size 16 \
+  --device auto \
+  --data-root "$DATA_ROOT"
+```
 
-- `experiment_summary.csv`
-- `experiment_summary.json`
-- `notebooks/01_pointnetfull_augmentation_summary.ipynb`
-- `notebooks/02_pointnetfull_augmentation_detailed_logs.ipynb`
-- `figures/`
-- `histories/`
-- `checkpoints/`
+## 7) Outputs
+
+Each run is written to a new timestamped directory:
+
+- `pointnetfull_aug_suite_YYYYMMDD_HHMMSS/`
+  - `runs/<experiment>/seed_<seed>/...`
+  - `summaries/run_summary.csv`
+  - `summaries/summary_experiments.csv`
+  - `summaries/summary_experiments_by_eval.csv`
+  - `results/plots/...`
+  - `results/top_confusions.csv`
+  - `notebooks/01_benchmark_summary.ipynb`
+  - `notebooks/02_detailed_runs.ipynb`
+  - `run_metadata.json`
 

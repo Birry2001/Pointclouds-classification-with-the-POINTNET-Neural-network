@@ -1,0 +1,11 @@
+Device: cuda:0 (NVIDIA GeForce MX110) (kind=cuda, amp=True)
+Dataset check OK: classes=10 train_ply=3991 test_ply=908
+Output directory: /home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/Pointclouds-classification-with-the-POINTNET-Neural-network/PointNetLab/Code/reports/pointnetfull_aug_suite_20260210_225240
+Mode: benchmark
+Experiments to run: ['baseline', 'plus_jitter', 'plus_occlusion', 'combo_full']
+Seeds: [0, 1, 2]
+epochs_max=150, batch_size=16, early_stop=(val_acc, patience=15)
+
+=== Running experiment=baseline seed=0 ===
+[baseline][seed=0] Epoch 001/150 train_loss=1.1884 train_acc=58.33% val_loss=1.1933 val_acc=58.70% best_epoch=1 no_improve=0/15
+[baseline][seed=0] Epoch 002/150 train_loss=0.7947 train_acc=73.79% val_loss=0.6873 val_acc=73.24% best_epoch=2 no_improve=0/15
