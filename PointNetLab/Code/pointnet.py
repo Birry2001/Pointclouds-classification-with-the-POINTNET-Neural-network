@@ -11,7 +11,7 @@ from typing import List, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 
 # Force local module resolution to avoid conflict with external "ply" package
@@ -392,9 +392,21 @@ def evaluate(model, device, loader):
     return 100.0 * correct / max(1, total)
 
 
-def train(model, device, train_loader, test_loader=None, epochs=25, lr=1e-3):
+def train(model,
+          device,
+          train_loader,
+          val_loader=None,
+          epochs=25,
+          lr=1e-3,
+          use_early_stopping=False,
+          early_stop_patience=8,
+          early_stop_min_delta=0.0):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+
+    best_val = None
+    no_improve = 0
+    best_state = None
 
     for epoch in range(epochs):
         model.train()
@@ -415,9 +427,24 @@ def train(model, device, train_loader, test_loader=None, epochs=25, lr=1e-3):
 
         scheduler.step()
 
-        if test_loader is not None:
-            acc = evaluate(model, device, test_loader)
-            print(f"Epoch {epoch+1:03d} | loss={loss.item():.4f} | test_acc={acc:.2f}%")
+        if val_loader is not None:
+            val_acc = evaluate(model, device, val_loader)
+            print(f"Epoch {epoch+1:03d} | loss={loss.item():.4f} | val_acc={val_acc:.2f}%")
+
+            if use_early_stopping:
+                improved = (best_val is None) or (val_acc > best_val + early_stop_min_delta)
+                if improved:
+                    best_val = val_acc
+                    no_improve = 0
+                    best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+                else:
+                    no_improve += 1
+                    if no_improve >= early_stop_patience:
+                        print(f"Early stopping déclenché à l'epoch {epoch+1}")
+                        break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
 
 
 if __name__ == '__main__':
@@ -425,17 +452,34 @@ if __name__ == '__main__':
 
     # Choisis ici les augmentations que tu veux composer
     AUGMENTATIONS_TRAIN = ["rot_z", "noise", "shuffle"]
+    AUGMENTATIONS_VAL = []
     AUGMENTATIONS_TEST = []
 
-    train_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_TRAIN))
+    VAL_RATIO = 0.2
+    SPLIT_SEED = 42
+
+    full_train_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_TRAIN))
+    full_train_eval_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_VAL))
     test_ds = PointCloudData(DATA_ROOT, folder='test', transform=build_transforms(AUGMENTATIONS_TEST))
 
+    # Split train -> train_sub + val_sub (early stopping sur val, pas sur test)
+    rng = np.random.RandomState(SPLIT_SEED)
+    indices = np.arange(len(full_train_ds))
+    rng.shuffle(indices)
+    val_size = int(len(indices) * VAL_RATIO)
+    val_idx = indices[:val_size].tolist()
+    train_idx = indices[val_size:].tolist()
+
+    train_ds = Subset(full_train_ds, train_idx)
+    val_ds = Subset(full_train_eval_ds, val_idx)
+
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_ds, batch_size=32)
+    val_loader = DataLoader(val_ds, batch_size=32, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=32, shuffle=False)
 
     # Choix du modèle: PointMLP | PointNetBasic | PointNetFull
     MODEL_NAME = "PointNetFull"
-    classes = len(train_ds.classes)
+    classes = len(full_train_ds.classes)
 
     if MODEL_NAME == "PointMLP":
         model = PointMLP(classes=classes)
@@ -450,11 +494,22 @@ if __name__ == '__main__':
     model.to(device)
 
     print("Classes:", classes)
-    print("Train size:", len(train_ds), "Test size:", len(test_ds))
+    print("Train size:", len(train_ds), "Val size:", len(val_ds), "Test size:", len(test_ds))
     print("Model:", MODEL_NAME, "Device:", device)
     print("Augs train:", AUGMENTATIONS_TRAIN)
+    print("Augs val:", AUGMENTATIONS_VAL)
     print("Augs test:", AUGMENTATIONS_TEST)
 
     t0 = time.time()
-    train(model, device, train_loader, test_loader=test_loader, epochs=25, lr=1e-3)
+    train(model,
+          device,
+          train_loader,
+          val_loader=val_loader,
+          epochs=50,
+          lr=1e-3,
+          use_early_stopping=True,
+          early_stop_patience=8,
+          early_stop_min_delta=0.0)
+    test_acc = evaluate(model, device, test_loader)
+    print(f"Final TEST accuracy (évalué une seule fois): {test_acc:.2f}%")
     print(f"Total time: {time.time() - t0:.1f}s")
