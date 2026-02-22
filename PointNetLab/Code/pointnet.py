@@ -154,31 +154,6 @@ class ToTensor(object):
 
 
 
-class RandomApply(object):
-    def __init__(self, transform, p: float = 0.5):
-        self.transform = transform
-        self.p = p
-
-    def __call__(self, pointcloud: np.ndarray):
-        if random.random() < self.p:
-            return self.transform(pointcloud)
-        return pointcloud
-
-
-class RandomChoiceApply(object):
-    """Apply one transform chosen at random from a list, with probability p."""
-
-    def __init__(self, transforms_list, p: float = 0.5):
-        self.transforms_list = transforms_list
-        self.p = p
-
-    def __call__(self, pointcloud: np.ndarray):
-        if (not self.transforms_list) or random.random() >= self.p:
-            return pointcloud
-        t = random.choice(self.transforms_list)
-        return t(pointcloud)
-
-
 AUGMENTATION_REGISTRY = {
     "rot_z": lambda: RandomRotationZ(),
     "noise": lambda: RandomNoise(std=0.02),
@@ -196,30 +171,6 @@ AUGMENTATION_REGISTRY = {
 def build_transforms(selected: Optional[List[str]] = None):
     selected = selected or []
     ops = [AUGMENTATION_REGISTRY[name]() for name in selected]
-    ops.append(ToTensor())
-    return transforms.Compose(ops)
-
-
-def build_train_transforms_occlusion_mix(extra_names: Optional[List[str]] = None,
-                                         p_occlusion: float = 0.5,
-                                         p_extra: float = 0.5,
-                                         occlusion_radius: float = 0.18,
-                                         baseline_names: Optional[List[str]] = None):
-    """
-    Baseline fixed + occlusion 50% + one random extra augmentation 50%.
-
-    - Baseline fixed by default: normalize + rot_z + noise + shuffle
-    - Occlusion is applied with probability p_occlusion
-    - One extra transform is chosen randomly from extra_names with probability p_extra
-    """
-    baseline_names = baseline_names or ["normalize", "rot_z", "noise", "shuffle"]
-    extra_names = extra_names or ["scale", "translate", "jitter", "mirror", "dropout"]
-
-    ops = [AUGMENTATION_REGISTRY[name]() for name in baseline_names]
-    ops.append(RandomApply(RandomSphericalOcclusion(radius=occlusion_radius, p=1.0), p=p_occlusion))
-
-    extra_ops = [AUGMENTATION_REGISTRY[name]() for name in extra_names]
-    ops.append(RandomChoiceApply(extra_ops, p=p_extra))
     ops.append(ToTensor())
     return transforms.Compose(ops)
 
@@ -501,22 +452,15 @@ if __name__ == '__main__':
     DATA_ROOT = "PointNetLab/data/ModelNet10_PLY"
 
     # Choisis ici les augmentations que tu veux composer
-    AUGMENTATIONS_TRAIN = ["normalize", "rot_z", "noise", "shuffle"]
+    AUGMENTATIONS_TRAIN = ["normalize", "rot_z", "noise", "shuffle", "occlusion"]
     AUGMENTATIONS_VAL = ["normalize"]
     AUGMENTATIONS_TEST = ["normalize"]
 
-    USE_OCCLUSION_MIX_POLICY = True
-    EXTRA_RANDOM_AUGS = ["scale", "translate", "jitter", "mirror", "dropout"]
 
     VAL_RATIO = 0.2
     SPLIT_SEED = 42
 
-    if USE_OCCLUSION_MIX_POLICY:
-        train_tf = build_train_transforms_occlusion_mix(extra_names=EXTRA_RANDOM_AUGS, p_occlusion=0.5, p_extra=0.5)
-    else:
-        train_tf = build_transforms(AUGMENTATIONS_TRAIN)
-
-    full_train_ds = PointCloudData(DATA_ROOT, folder='train', transform=train_tf)
+    full_train_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_TRAIN))
     full_train_eval_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_VAL))
     test_ds = PointCloudData(DATA_ROOT, folder='test', transform=build_transforms(AUGMENTATIONS_TEST))
 
