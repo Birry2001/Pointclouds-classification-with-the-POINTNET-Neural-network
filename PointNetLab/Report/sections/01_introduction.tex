@@ -1,0 +1,17 @@
+\chapter{Introduction}
+
+\section{Contexte}
+Les nuages de points 3D sont une représentation légère et directe de la géométrie.
+Contrairement aux voxels ou aux vues multi-images, ils sont non structurés et invariants à l'ordre des points.
+PointNet répond à ce défi en combinant des MLP partagés et une agrégation symétrique par max-pooling~\cite{qi2017pointnet}.
+
+\section{Objectifs du projet}
+Le projet poursuit trois objectifs~:
+\begin{itemize}
+  \item implémenter et évaluer une baseline \textbf{PointMLP} ;
+  \item implémenter \textbf{PointNet} en version basique puis avec \textbf{T-Net} ;
+  \item étudier l'impact de la \textbf{data augmentation} 3D sur la généralisation.
+\end{itemize}
+
+\section{Données}
+Les expériences utilisent ModelNet10 (nuages PLY, 1024 points par objet), issu de la famille ModelNet~\cite{wu20153dshapenets}.

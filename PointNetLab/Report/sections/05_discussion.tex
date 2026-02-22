@@ -1,0 +1,22 @@
+\chapter{Discussion}
+
+\section{Analyse}
+Les résultats confirment que l'occlusion est la transformation la plus utile dans notre contexte.
+Elle améliore la robustesse sans la complexité d'un pipeline d'augmentations trop chargé.
+
+Le gain en test (\textasciitilde +2.8 points entre baseline et baseline+occlusion) est cohérent
+avec l'objectif de généralisation sur des nuages partiellement observés.
+
+\section{Limites}
+\begin{itemize}
+  \item Évaluation sur un nombre limité de seeds ;
+  \item Pas d'étude exhaustive des hyperparamètres d'occlusion (rayon/probabilité) dans la version finale ;
+  \item Résultats centrés sur ModelNet10.
+\end{itemize}
+
+\section{Pistes immédiates}
+\begin{itemize}
+  \item moyenner sur 3 seeds et rapporter mean$\pm$std ;
+  \item ablation fine du rayon d'occlusion ;
+  \item extension à ModelNet40.
+\end{itemize}

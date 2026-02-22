@@ -1,0 +1,43 @@
+\chapter{Résultats}
+
+\section{Synthèse quantitative}
+Le tableau~\ref{tab:main-results} résume les principaux résultats consolidés.
+
+\begin{table}[H]
+\centering
+\caption{Résultats principaux (ModelNet10).}
+\label{tab:main-results}
+\begin{tabular}{lcc}
+\toprule
+Configuration & Validation (best) & Test final \\
+\midrule
+Baseline (normalize+rot\_z+noise+shuffle) & 91.98\% & 86.89\% \\
+Baseline + occlusion & 94.49\% & 89.65\% \\
+Baseline + combo large & 94.36\% & 89.21\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Courbes d'apprentissage}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/plus_occlusion_curves.png}
+  \caption{Exemple de courbes (configuration occlusion).}
+\end{figure}
+
+\section{Matrices de confusion}
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/baseline_confusion_matrix.png}
+    \caption{Baseline}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/plus_occlusion_confusion_matrix.png}
+    \caption{Baseline + occlusion}
+  \end{subfigure}
+  \caption{Comparaison des confusions par classe.}
+\end{figure}
