@@ -1,0 +1,42 @@
+\documentclass[11pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{csquotes}
+
+\title{Classification de nuages de points 3D avec PointNet\\\large Master PAR -- PointNet Lab}
+\author{NOCHI MAGOUO}
+\date{2025--2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+Ce rapport présente l'implémentation en PyTorch de trois modèles de classification 3D sur ModelNet10~: un MLP de base, PointNet basique, puis PointNet avec T-Net et régularisation.
+Le protocole final applique un découpage train/validation/test propre, un early stopping piloté sur validation, et une augmentation finale focalisée sur l'occlusion.
+Le meilleur run final atteint environ \textbf{90\%} d'accuracy test avec la configuration \emph{baseline + occlusion}.
+
+\input{sections/01_introduction}
+\input{sections/02_methodes}
+\input{sections/03_protocole_experimental}
+\input{sections/04_resultats}
+\input{sections/05_discussion}
+\input{sections/06_conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

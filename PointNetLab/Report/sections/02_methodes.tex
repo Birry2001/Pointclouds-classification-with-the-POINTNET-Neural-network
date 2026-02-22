@@ -1,0 +1,26 @@
+\chapter{Méthodes}
+
+\section{PointMLP (Exercice 1)}
+Le premier modèle aplatit le nuage ($1024\times3=3072$) puis applique~:
+\begin{align}
+3072 \rightarrow 512 \rightarrow 256 \rightarrow N_{classes}
+\end{align}
+avec BatchNorm, ReLU, Dropout ($p=0.3$) et LogSoftmax en sortie.
+
+\section{PointNet basique (Exercice 2.1)}
+PointNet basique applique des convolutions 1D de type MLP partagé sur les points,
+produit un descripteur global via max-pooling, puis un classifieur fully-connected.
+
+\section{PointNet avec T-Net (Exercice 2.2)}
+La version complète inclut un T-Net d'alignement $3\times3$ et un terme de régularisation
+encourageant l'orthogonalité de la transformation.
+
+\section{Augmentations 3D retenues}
+Le pipeline final retenu est volontairement simple et stable~:
+\begin{itemize}
+  \item \texttt{normalize} (sphère unité),
+  \item rotation aléatoire autour de $z$,
+  \item bruit gaussien,
+  \item shuffle des points,
+  \item occlusion sphérique.
+\end{itemize}

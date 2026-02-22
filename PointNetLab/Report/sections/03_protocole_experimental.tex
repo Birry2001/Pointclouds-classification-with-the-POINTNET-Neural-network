@@ -1,0 +1,22 @@
+\chapter{Protocole expérimental}
+
+\section{Découpage des données}
+Le protocole final utilise~:
+\begin{itemize}
+  \item train/validation via split du train set (~80/20),
+  \item test utilisé \textbf{uniquement} en fin d'entraînement.
+\end{itemize}
+Ce choix évite toute fuite d'information vers le test.
+
+\section{Reproductibilité}
+Un seed global est fixé (42), utilisé pour le split et les tirages aléatoires,
+avec un early stopping piloté sur la métrique de validation.
+
+\section{Configuration finale}
+Configuration principale reportée dans le notebook~:
+\begin{itemize}
+  \item classes: 10,
+  \item train: 3193, validation: 798, test: 908,
+  \item patience early stopping: 15,
+  \item augmentations train: \texttt{normalize, rot\_z, noise, shuffle, occlusion}.
+\end{itemize}
