@@ -1,596 +1,517 @@
 #!/usr/bin/env python
-# PointNet for point cloud classification
-#
-# -- Paul CHECCHIN - 5/11/2021
-#
+# PointNet for point cloud classification (clean TP version)
 
-import numpy as np
-import random
 import math
 import os
+import random
 import sys
 import time
-import torch
-import scipy.spatial.distance
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-import torch.nn as nn
-import torch.nn.functional as F
+from typing import List, Optional
 
-# Import functions to read and write ply files.
-# Force local module resolution to avoid conflict with the external "ply" package.
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, Dataset, Subset
+from torchvision import transforms
+
+# Force local module resolution to avoid conflict with external "ply" package
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR in sys.path:
     sys.path.remove(_THIS_DIR)
 sys.path.insert(0, _THIS_DIR)
-from ply import write_ply, read_ply
+from ply import read_ply
 
-# Classe pour la realisation de la rotation des pointclouds suivant l'axe z
-class RandomRotation_z(object):
-    def __call__(self, pointcloud):
-        theta = random.random() * 2. * math.pi
-        rot_matrix = np.array([[math.cos(theta), -math.sin(theta),      0],
-                               [math.sin(theta),  math.cos(theta),      0],
-                               [0,                              0,      1]])
-        rot_pointcloud = rot_matrix.dot(pointcloud.T).T
-        return rot_pointcloud
 
-# Classe pour l'ajout d'un bruit gaussien de moyenne 0 et d'ecart type 0.02 au nuage de points
+# -----------------------------
+# Data augmentations
+# -----------------------------
+
+class RandomRotationZ(object):
+    def __call__(self, pointcloud: np.ndarray):
+        theta = random.random() * 2.0 * math.pi
+        rot = np.array(
+            [
+                [math.cos(theta), -math.sin(theta), 0.0],
+                [math.sin(theta), math.cos(theta), 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        )
+        return pointcloud @ rot.T
+
 
 class RandomNoise(object):
-    def __call__(self, pointcloud):
-        noise = np.random.normal(0, 0.02, (pointcloud.shape))
-        noisy_pointcloud = pointcloud + noise
-        return noisy_pointcloud
+    def __init__(self, std: float = 0.02):
+        self.std = std
 
-# Classe pour la modification aleatoire de l'ordre des points, 
-# peut servir de petite augmentation(le modèle voit la même forme sous différentes permutations),ce qui aide à éviter de “sur-apprendre” un ordre accidentel
-# Ça évite un biais d’ordre introduit par le dataset
+    def __call__(self, pointcloud: np.ndarray):
+        noise = np.random.normal(0.0, self.std, pointcloud.shape).astype(np.float32)
+        return pointcloud + noise
+
+
 class ShufflePoints(object):
-    def __call__(self, pointcloud):
-        np.random.shuffle(pointcloud)
-        return pointcloud
+    def __call__(self, pointcloud: np.ndarray):
+        out = pointcloud.copy()
+        np.random.shuffle(out)
+        return out
 
-# Classe pour la convertion du nuage de points NumPy en tenseur PyTorch
+
+class RandomScale(object):
+    def __init__(self, low: float = 0.85, high: float = 1.20):
+        self.low = low
+        self.high = high
+
+    def __call__(self, pointcloud: np.ndarray):
+        s = np.random.uniform(self.low, self.high)
+        return pointcloud * np.float32(s)
+
+
+class RandomTranslate(object):
+    def __init__(self, shift: float = 0.10):
+        self.shift = shift
+
+    def __call__(self, pointcloud: np.ndarray):
+        t = np.random.uniform(-self.shift, self.shift, size=(1, 3)).astype(np.float32)
+        return pointcloud + t
+
+
+class RandomJitterClip(object):
+    def __init__(self, sigma: float = 0.01, clip: float = 0.04):
+        self.sigma = sigma
+        self.clip = clip
+
+    def __call__(self, pointcloud: np.ndarray):
+        jit = self.sigma * np.random.randn(*pointcloud.shape).astype(np.float32)
+        jit = np.clip(jit, -self.clip, self.clip)
+        return pointcloud + jit
+
+
+class RandomMirrorXY(object):
+    def __init__(self, p: float = 0.3):
+        self.p = p
+
+    def __call__(self, pointcloud: np.ndarray):
+        if random.random() >= self.p:
+            return pointcloud
+        out = pointcloud.copy()
+        axis = random.choice([0, 1])
+        out[:, axis] = -out[:, axis]
+        return out
+
+
+class RandomPointDropout(object):
+    def __init__(self, max_ratio: float = 0.45):
+        self.max_ratio = max_ratio
+
+    def __call__(self, pointcloud: np.ndarray):
+        out = pointcloud.copy()
+        n = out.shape[0]
+        ratio = np.random.uniform(0.0, self.max_ratio)
+        drop_idx = np.where(np.random.random(n) <= ratio)[0]
+        if len(drop_idx) > 0:
+            out[drop_idx] = out[0]
+        return out
+
+
+class RandomSphericalOcclusion(object):
+    def __init__(self, radius: float = 0.18, p: float = 0.25):
+        self.radius = radius
+        self.p = p
+
+    def __call__(self, pointcloud: np.ndarray):
+        if random.random() >= self.p:
+            return pointcloud
+
+        out = pointcloud.copy()
+        center = out[np.random.randint(0, out.shape[0])]
+        d = np.linalg.norm(out - center[None, :], axis=1)
+        keep_mask = d > self.radius
+
+        if np.sum(keep_mask) < 8:
+            return out
+
+        kept = out[keep_mask]
+        if kept.shape[0] >= out.shape[0]:
+            return kept[: out.shape[0]]
+
+        extra_idx = np.random.choice(kept.shape[0], out.shape[0] - kept.shape[0], replace=True)
+        return np.concatenate([kept, kept[extra_idx]], axis=0)
+
+
+class UnitSphereNormalize(object):
+    def __call__(self, pointcloud: np.ndarray):
+        centered = pointcloud - np.mean(pointcloud, axis=0, keepdims=True)
+        norms = np.linalg.norm(centered, axis=1)
+        m = float(np.max(norms)) if norms.size else 1.0
+        if m < 1e-12:
+            return centered.astype(np.float32)
+        return (centered / m).astype(np.float32)
+
+
 class ToTensor(object):
-    def __call__(self, pointcloud):
-        return torch.from_numpy(pointcloud)
+    def __call__(self, pointcloud: np.ndarray):
+        return torch.from_numpy(pointcloud.astype(np.float32))
 
 
 
+AUGMENTATION_REGISTRY = {
+    "rot_z": lambda: RandomRotationZ(),
+    "noise": lambda: RandomNoise(std=0.02),
+    "shuffle": lambda: ShufflePoints(),
+    "scale": lambda: RandomScale(low=0.85, high=1.20),
+    "translate": lambda: RandomTranslate(shift=0.10),
+    "jitter": lambda: RandomJitterClip(sigma=0.01, clip=0.04),
+    "mirror": lambda: RandomMirrorXY(p=0.3),
+    "dropout": lambda: RandomPointDropout(max_ratio=0.45),
+    "occlusion": lambda: RandomSphericalOcclusion(radius=0.18, p=0.25),
+    "normalize": lambda: UnitSphereNormalize(),
+}
 
-# Pipeline de transformations (data augmentation + conversion) appliqué à CHAQUE nuage de points
-# dans le Dataset, avant de le donner au réseau.
-#
-# transforms.Compose enchaîne plusieurs transforms : 1 devient l’entrée de la transfo 2, etc.
 
-def default_transforms():
-    return transforms.Compose([RandomRotation_z(),
-                               RandomNoise(),
-                               ShufflePoints(),
-                               ToTensor()])
+def build_transforms(selected: Optional[List[str]] = None):
+    selected = selected or []
+    ops = [AUGMENTATION_REGISTRY[name]() for name in selected]
+    ops.append(ToTensor())
+    return transforms.Compose(ops)
 
+
+# -----------------------------
+# Dataset
+# -----------------------------
 
 class PointCloudData(Dataset):
-    """
-    Dataset PyTorch pour ModelNet
-    Rôle :
-      - indexer tous les fichiers .ply (chemins + labels)
-      - fournir __len__ et __getitem__ pour que DataLoader puisse itérer et créer des batches
-      - charger un .ply, construire un nuage Nx3, appliquer des transforms, renvoyer (pointcloud, label)
-    """
-
-    def __init__(self,
-                 root_dir,
-                 folder="train",
-                 transform=default_transforms()):
-        # root_dir : dossier racine du dataset (contient un dossier par classe)
+    def __init__(self, root_dir, folder="train", transform=None):
         self.root_dir = root_dir
+        self.transforms = transform if transform is not None else build_transforms(["rot_z", "noise", "shuffle"])
 
-        # Liste des noms de classes : on prend uniquement les sous-dossiers de root_dir
-        # sorted(...) pour garder un ordre stable (utile pour un mapping classe->id reproductible)
-        folders = [dir for dir in sorted(os.listdir(root_dir))
-                   if os.path.isdir(root_dir + "/" + dir)]
+        folders = [d for d in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, d))]
+        self.classes = {name: i for i, name in enumerate(folders)}
 
-        # Mapping "nom_de_classe" -> index entier (ex: {"chair": 3, "table": 7, ...})
-        # enumerate donne (0, folders[0]), (1, folders[1]), ...
-        self.classes = {folder: i for i, folder in enumerate(folders)}
-
-        # Pipeline de transformations appliqué à chaque nuage dans __getitem__
-        # (ex: rotation, bruit, shuffle des points, conversion en Tensor)
-        self.transforms = transform
-
-        # Liste qui contiendra tous les samples du dataset
-        # Chaque élément sera un dict: {'ply_path': ..., 'category': ...}
         self.files = []
-
-        # Parcours de toutes les classes (dossiers) pour indexer tous les fichiers .ply
         for category in self.classes.keys():
-            # Exemple: root_dir/chair/train ou root_dir/chair/test
-            new_dir = root_dir + "/" + category + "/" + folder
-
-            # On parcourt les fichiers du dossier correspondant à cette classe et ce split
-            for file in os.listdir(new_dir):
-                # On ne garde que les fichiers PLY (nuages de points)
+            split_dir = os.path.join(root_dir, category, folder)
+            for file in os.listdir(split_dir):
                 if file.endswith('.ply'):
-                    sample = {}
-                    # Chemin complet du fichier .ply
-                    sample['ply_path'] = new_dir + "/" + file
-                    # Nom de la classe (string) ; l'index entier sera obtenu via self.classes[category]
-                    sample['category'] = category
-                    # Ajout dans la liste globale de samples
-                    self.files.append(sample)
+                    self.files.append({
+                        'ply_path': os.path.join(split_dir, file),
+                        'category': category,
+                    })
 
     def __len__(self):
-        """
-        Retourne le nombre total d'exemples.
-        Permet à len(dataset) de fonctionner et aide DataLoader à savoir combien itérer.
-        """
         return len(self.files)
 
     def __getitem__(self, idx):
-        """
-        Retourne un exemple à l'index idx.
-        dataset[idx] appelle cette méthode.
-
-        Sortie : un dict contenant
-          - 'pointcloud' : nuage de points (après transforms)
-          - 'category'   : label entier de la classe
-        """
-
-        # Récupération des infos du sample indexé
-        ply_path = self.files[idx]['ply_path']
-        category = self.files[idx]['category']  # string (ex: "chair")
-
-        # Lecture du fichier .ply (renvoie typiquement des champs 'x','y','z' sous forme de vecteurs)
-        data = read_ply(ply_path)
-
-        # Construction du nuage de points au format (N, 3)
-        # - vstack empile en (3, N)
-        # - .T transpose en (N, 3)
-        # Ensuite on applique les transformations (rotation/bruit/shuffle/toTensor...)
-        pointcloud = self.transforms(np.vstack((data['x'],
-                                                data['y'],
-                                                data['z'])).T)
-
-        # Conversion du nom de classe (string) en label entier
-        label = self.classes[category]
-
-        # On renvoie un sample sous forme de dictionnaire (DataLoader saura faire des batches)
+        sample = self.files[idx]
+        data = read_ply(sample['ply_path'])
+        pointcloud = np.vstack((data['x'], data['y'], data['z'])).T.astype(np.float32)
+        pointcloud = self.transforms(pointcloud)
+        label = self.classes[sample['category']]
         return {'pointcloud': pointcloud, 'category': label}
 
 
+# -----------------------------
+# Models
+# -----------------------------
 
 class PointMLP(nn.Module):
+    # Ex.1: 3072 -> 512 -> 256 -> N, BN + ReLU, dropout(0.3), LogSoftmax
     def __init__(self, classes=40):
         super().__init__()
         self.flatten = nn.Flatten(start_dim=1)
-
         self.fc1 = nn.Linear(3072, 512)
         self.bn1 = nn.BatchNorm1d(512)
-        self.act1 = nn.ReLU()
-
         self.fc2 = nn.Linear(512, 256)
         self.bn2 = nn.BatchNorm1d(256)
-        self.act2 = nn.ReLU()
         self.drop = nn.Dropout(0.3)
-
         self.fc3 = nn.Linear(256, classes)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
-
-    def forward(self, input):
-
-        x = self.flatten(input)
-
-        x = self.fc1(x)
-        x = self.bn1(x)
-        x = self.act1(x)
-
-        x = self.fc2(x)
-        x = self.bn2(x)
-        x = self.act2(x)
-        x = self.drop(x)
-
-        x = self.fc3(x)
-        x = self.logsoftmax(x)
-
+    def forward(self, x):
+        x = self.flatten(x)
+        x = torch.relu(self.bn1(self.fc1(x)))
+        x = self.drop(torch.relu(self.bn2(self.fc2(x))))
+        x = self.logsoftmax(self.fc3(x))
         return x
-        
 
 
 class PointNetBasic(nn.Module):
+    # Ex.2.1: PointNet sans T-Net
     def __init__(self, classes=40):
         super().__init__()
-
-        self.conv1 = nn.Conv1d(3, 64,1)
+        self.conv1 = nn.Conv1d(3, 64, 1)
         self.bn1 = nn.BatchNorm1d(64)
-        self.act1 = nn.ReLU()
-
-        self.conv2 = nn.Conv1d(64, 64,1)
+        self.conv2 = nn.Conv1d(64, 64, 1)
         self.bn2 = nn.BatchNorm1d(64)
-        self.act2 = nn.ReLU()
-        
-        self.conv3 = nn.Conv1d(64, 64,1)
+        self.conv3 = nn.Conv1d(64, 64, 1)
         self.bn3 = nn.BatchNorm1d(64)
-        self.act3 = nn.ReLU()
-
-        self.conv4 = nn.Conv1d(64, 128,1)
+        self.conv4 = nn.Conv1d(64, 128, 1)
         self.bn4 = nn.BatchNorm1d(128)
-        self.act4 = nn.ReLU()       
-
-        self.conv5 = nn.Conv1d(128, 1024,1)
+        self.conv5 = nn.Conv1d(128, 1024, 1)
         self.bn5 = nn.BatchNorm1d(1024)
-        self.act5 = nn.ReLU()
 
-        self.maxpool5 = nn.MaxPool1d(1024)
-
-        self.fc6 = nn.Linear(1024, 512)
+        self.maxpool = nn.MaxPool1d(1024)
+        self.fc1 = nn.Linear(1024, 512)
         self.bn6 = nn.BatchNorm1d(512)
-        self.act6 = nn.ReLU()
-
-        self.fc7 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(512, 256)
         self.bn7 = nn.BatchNorm1d(256)
-        self.act7 = nn.ReLU()
-        self.drop7 = nn.Dropout(0.3)
-
-        self.fc8 = nn.Linear(256, classes)
+        self.drop = nn.Dropout(0.3)
+        self.fc3 = nn.Linear(256, classes)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
-
-    def forward(self, input):
-
-        x = self.conv1(input)
-        x = self.bn1(x)
-        x = self.act1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.act2(x)
-
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.act3(x)
-
-        x = self.conv4(x)
-        x = self.bn4(x)
-        x = self.act4(x)
-
-        x = self.conv5(x)
-        x = self.bn5(x)
-        x = self.act5(x)
-
-        x = self.maxpool5(x)
-        x = x.squeeze(-1)
-
-        x = self.fc6(x)
-        x = self.bn6(x)
-        x = self.act6(x)
-
-        x = self.fc7(x)
-        x = self.bn7(x)
-        x = self.act7(x)
-        x = self.drop7(x)
-
-        x = self.fc8(x)
-        x = self.logsoftmax(x)
+    def forward(self, x):
+        x = torch.relu(self.bn1(self.conv1(x)))
+        x = torch.relu(self.bn2(self.conv2(x)))
+        x = torch.relu(self.bn3(self.conv3(x)))
+        x = torch.relu(self.bn4(self.conv4(x)))
+        x = torch.relu(self.bn5(self.conv5(x)))
+        x = self.maxpool(x).squeeze(-1)
+        x = torch.relu(self.bn6(self.fc1(x)))
+        x = self.drop(torch.relu(self.bn7(self.fc2(x))))
+        x = self.logsoftmax(self.fc3(x))
         return x
-
 
 
 class Tnet(nn.Module):
+    # Ex.2.2: mini-PointNet qui régressse une matrice k x k
     def __init__(self, k=3):
         super().__init__()
-
         self.k = k
-
-        self.conv1 = nn.Conv1d(k, 64,1)
+        self.conv1 = nn.Conv1d(k, 64, 1)
         self.bn1 = nn.BatchNorm1d(64)
-        self.act1 = nn.ReLU()
-
-        self.conv2 = nn.Conv1d(64, 128,1)
+        self.conv2 = nn.Conv1d(64, 128, 1)
         self.bn2 = nn.BatchNorm1d(128)
-        self.act2 = nn.ReLU()       
-
-        self.conv3 = nn.Conv1d(128, 1024,1)
+        self.conv3 = nn.Conv1d(128, 1024, 1)
         self.bn3 = nn.BatchNorm1d(1024)
-        self.act3 = nn.ReLU()
 
-        self.maxpool3 = nn.MaxPool1d(1024)
-
-        self.fc4 = nn.Linear(1024, 512)
+        self.maxpool = nn.MaxPool1d(1024)
+        self.fc1 = nn.Linear(1024, 512)
         self.bn4 = nn.BatchNorm1d(512)
-        self.act4 = nn.ReLU()
-
-        self.fc5 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(512, 256)
         self.bn5 = nn.BatchNorm1d(256)
-        self.act5 = nn.ReLU()
+        self.fc3 = nn.Linear(256, k * k)
 
-        self.fc6 = nn.Linear(256, k*k)
+    def forward(self, x):
+        x = torch.relu(self.bn1(self.conv1(x)))
+        x = torch.relu(self.bn2(self.conv2(x)))
+        x = torch.relu(self.bn3(self.conv3(x)))
+        x = self.maxpool(x).squeeze(-1)
+        x = torch.relu(self.bn4(self.fc1(x)))
+        x = torch.relu(self.bn5(self.fc2(x)))
+        x = self.fc3(x).reshape(x.size(0), self.k, self.k)
 
+        identity = torch.eye(self.k, device=x.device, dtype=x.dtype).unsqueeze(0).repeat(x.size(0), 1, 1)
+        return x + identity
 
-    def forward(self, input,):
-
-        x = self.conv1(input)
-        x = self.bn1(x)
-        x = self.act1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.act2(x)
-
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.act3(x)
-
-        x = self.maxpool3(x)
-        x = x.squeeze(-1)
-
-        x = self.fc4(x)
-        x = self.bn4(x)
-        x = self.act4(x)
-
-        x = self.fc5(x)
-        x = self.bn5(x)
-        x = self.act5(x)
-
-        x = self.fc6(x)
-        x = x.reshape(x.size(0),self.k,self.k)
-
-        I = torch.eye(self.k, device=x.device, dtype=x.dtype)
-        I = I.unsqueeze(0)
-        I = I.repeat(x.size(0),1,1)
-        x = x + I
-
-        return x
 
 class PointNetFull(nn.Module):
-    def __init__(self, tnet1, tnet2, classes=40 ):
+    # Ex.2.2 demandé: PointNet avec le 1er T-Net (3x3)
+    def __init__(self, classes=40):
         super().__init__()
+        self.tnet1 = Tnet(k=3)
 
-        self.tnet1 = tnet1
-        self.tnet2 = tnet2
-
-        self.conv1 = nn.Conv1d(3, 64,1)
+        self.conv1 = nn.Conv1d(3, 64, 1)
         self.bn1 = nn.BatchNorm1d(64)
-        self.act1 = nn.ReLU()
-
-        self.conv2 = nn.Conv1d(64, 64,1)
+        self.conv2 = nn.Conv1d(64, 64, 1)
         self.bn2 = nn.BatchNorm1d(64)
-        self.act2 = nn.ReLU()
-        
-        self.conv3 = nn.Conv1d(64, 64,1)
+        self.conv3 = nn.Conv1d(64, 64, 1)
         self.bn3 = nn.BatchNorm1d(64)
-        self.act3 = nn.ReLU()
-
-        self.conv4 = nn.Conv1d(64, 128,1)
+        self.conv4 = nn.Conv1d(64, 128, 1)
         self.bn4 = nn.BatchNorm1d(128)
-        self.act4 = nn.ReLU()       
-
-        self.conv5 = nn.Conv1d(128, 1024,1)
+        self.conv5 = nn.Conv1d(128, 1024, 1)
         self.bn5 = nn.BatchNorm1d(1024)
-        self.act5 = nn.ReLU()
 
-        self.maxpool5 = nn.MaxPool1d(1024)
-
-        self.fc6 = nn.Linear(1024, 512)
+        self.maxpool = nn.MaxPool1d(1024)
+        self.fc1 = nn.Linear(1024, 512)
         self.bn6 = nn.BatchNorm1d(512)
-        self.act6 = nn.ReLU()
-
-        self.fc7 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(512, 256)
         self.bn7 = nn.BatchNorm1d(256)
-        self.act7 = nn.ReLU()
-        self.drop7 = nn.Dropout(0.3)
-
-        self.fc8 = nn.Linear(256, classes)
+        self.drop = nn.Dropout(0.3)
+        self.fc3 = nn.Linear(256, classes)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
+    def forward(self, x):
+        m3x3 = self.tnet1(x)
+        x = torch.bmm(m3x3, x)
 
-    def forward(self, input):
+        x = torch.relu(self.bn1(self.conv1(x)))
+        x = torch.relu(self.bn2(self.conv2(x)))
+        x = torch.relu(self.bn3(self.conv3(x)))
+        x = torch.relu(self.bn4(self.conv4(x)))
+        x = torch.relu(self.bn5(self.conv5(x)))
 
-        m3x3 = self.tnet1(input)
-        x = torch.bmm(m3x3, input)
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.act1(x)
+        x = self.maxpool(x).squeeze(-1)
+        x = torch.relu(self.bn6(self.fc1(x)))
+        x = self.drop(torch.relu(self.bn7(self.fc2(x))))
+        x = self.logsoftmax(self.fc3(x))
+        return x, m3x3
 
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.act2(x)
 
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.act3(x)
-
-        m64x64 = self.tnet2(x)
-        x = torch.bmm(m64x64, x)
-
-        x = self.conv4(x)
-        x = self.bn4(x)
-        x = self.act4(x)
-
-        x = self.conv5(x)
-        x = self.bn5(x)
-        x = self.act5(x)
-
-        x = self.maxpool5(x)
-        x = x.squeeze(-1)
-
-        x = self.fc6(x)
-        x = self.bn6(x)
-        x = self.act6(x)
-
-        x = self.fc7(x)
-        x = self.bn7(x)
-        x = self.act7(x)
-        x = self.drop7(x)
-
-        x = self.fc8(x)
-        x = self.logsoftmax(x)
-        return x
-
+# -----------------------------
+# Losses
+# -----------------------------
 
 def basic_loss(outputs, labels):
-    # NLLLoss = Negative Log-Likelihood Loss :
-    # compare des log-probabilités par classe (sortie de LogSoftmax) au label vrai (classe entière)
-    criterion = torch.nn.NLLLoss()
-
-    # Taille du batch (nombre d'exemples) 
-    bsize = outputs.size(0)
-
-    # Calcule la perte moyenne sur le batch
+    criterion = nn.NLLLoss()
     return criterion(outputs, labels)
 
 
-
 def pointnet_full_loss(outputs, labels, m3x3, alpha=0.001):
-    # NLLLoss: attend des log-probabilités (LogSoftmax) et des labels entiers
-    criterion = torch.nn.NLLLoss()
+    criterion = nn.NLLLoss()
     bsize = outputs.size(0)
-
-    # Crée une matrice identité 3x3 I, puis la duplique bsize fois pour obtenir un tenseur (bsize, 3, 3).
-    # On veut une identité par élément du batch car m3x3 est aussi une matrice (3x3) par exemple.
-    # require_grad=True permet à PyTorch de suivre les opérations pour le calcul des gradients (ici I est une "référence" constante).
-    # Si le modèle tourne sur GPU (outputs.is_cuda), on déplace id3x3 sur le GPU aussi, sinon CPU/GPU mélangés => erreur de device.
-    id3x3 = torch.eye(3, requires_grad=True).repeat(bsize, 1, 1)
-    if outputs.is_cuda:
-        id3x3 = id3x3.cuda()
-
-
-    # Régularisation T-Net : forcer m3x3 à être "presque orthogonale" (m*m^T ≈ I)
+    id3x3 = torch.eye(3, device=outputs.device, dtype=outputs.dtype).unsqueeze(0).repeat(bsize, 1, 1)
     diff3x3 = id3x3 - torch.bmm(m3x3, m3x3.transpose(1, 2))
-
-    # Perte classification + pénalité d'orthogonalité
-    return criterion(outputs, labels) + alpha * (torch.norm(diff3x3)) / float(bsize)
+    return criterion(outputs, labels) + alpha * torch.norm(diff3x3) / float(bsize)
 
 
+# -----------------------------
+# Training helpers
+# -----------------------------
 
-def train(model, device, train_loader, test_loader=None, epochs=250):
-    # Optimiseur Adam : met à jour les paramètres du modèle via le gradient (lr = pas d'apprentissage)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+def forward_with_model(model, x):
+    if isinstance(model, PointMLP):
+        out = model(x.transpose(1, 2))
+        return out, None
+    if isinstance(model, PointNetBasic):
+        out = model(x.transpose(1, 2))
+        return out, None
+    out, m3x3 = model(x.transpose(1, 2))
+    return out, m3x3
 
-    # Scheduler : réduit le lr tous les 20 epochs (lr *= 0.5) pour stabiliser/affiner l'apprentissage
+
+def evaluate(model, device, loader):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch in loader:
+            x = batch['pointcloud'].to(device).float()
+            y = batch['category'].to(device)
+            out, _ = forward_with_model(model, x)
+            pred = out.argmax(dim=1)
+            total += y.size(0)
+            correct += (pred == y).sum().item()
+    return 100.0 * correct / max(1, total)
+
+
+def train(model,
+          device,
+          train_loader,
+          val_loader=None,
+          epochs=25,
+          lr=1e-3,
+          use_early_stopping=False,
+          early_stop_patience=8,
+          early_stop_min_delta=0.0):
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 
-    loss = 0
+    best_val = None
+    no_improve = 0
+    best_state = None
+
     for epoch in range(epochs):
-
-        # Mode entraînement : active dropout, batchnorm en mode "train", etc.
         model.train()
+        for batch in train_loader:
+            x = batch['pointcloud'].to(device).float()  # (B, N, 3)
+            y = batch['category'].to(device)
 
-        # Boucle sur les mini-batchs fournis par le DataLoader
-        for i, data in enumerate(train_loader, 0):
-
-            # Récupère le batch et l'envoie sur le bon device (CPU/GPU)
-            # .float() : s'assure que les points sont en float32 pour le réseau
-            inputs = data['pointcloud'].to(device).float()
-            labels = data['category'].to(device)
-
-            # Remet à zéro les gradients accumulés (sinon ils s'additionnent d'une itération à l'autre)
             optimizer.zero_grad()
+            out, m3x3 = forward_with_model(model, x)
 
-            # Le modèle attend (B, 3, N) : on transpose depuis (B, N, 3)
-            outputs = model(inputs.transpose(1, 2))
+            if isinstance(model, PointNetFull):
+                loss = pointnet_full_loss(out, y, m3x3)
+            else:
+                loss = basic_loss(out, y)
 
-
-            # Calcule la loss de classification (ici NLLLoss sur les log-probas)
-            loss = basic_loss(outputs, labels)
-
-
-            # Backprop : calcule dloss/dparams
             loss.backward()
-
-            # Mise à jour des paramètres avec l'optimiseur
             optimizer.step()
 
-        # Mode évaluation : dropout désactivé, batchnorm en mode "eval"
-        model.eval()
-        correct = total = 0
-
-        # Si on a un loader de test/validation, on calcule l'accuracy
-        if test_loader:
-            with torch.no_grad():  # pas de gradient en eval -> plus rapide et moins de mémoire
-                for data in test_loader:
-                    inputs = data['pointcloud'].to(device).float()
-                    labels = data['category'].to(device)
-
-                    outputs = model(inputs.transpose(1, 2))
-                    # outputs, __ = model(inputs.transpose(1,2))
-
-                    # predicted = argmax sur la dimension "classes"
-                    _, predicted = torch.max(outputs.data, 1)
-
-                    # total = nombre total d'exemples vus jusque-là (on ajoute la taille du batch courant)    
-                    total += labels.size(0)
-
-                    # (predicted == labels) donne un tenseur de booléens (True si bonne prédiction)
-                    # .sum() compte combien de True dans le batch (donc nb de prédictions correctes)
-                    # .item() convertit le résultat (tensor scalaire) en nombre Python
-                    correct += (predicted == labels).sum().item()
-
-
-            # Calcule l'accuracy en pourcentage :
-            # - correct / total = proportion de prédictions correctes
-            # - 100. * ...      = conversion en %
-            val_acc = 100. * correct / total
-
-
-            # Affiche un résumé de l'epoch :
-            # - epoch+1 : numéro d'epoch (on commence à 1 pour l'affichage)
-            # - loss    : perte (formatée avec 3 décimales)
-            # - val_acc : accuracy test (formatée avec 1 décimale) ; "%%" affiche le caractère % dans la string
-            print('Epoch: %d, Loss: %.3f, Test accuracy: %.1f %%' % (epoch+1, loss, val_acc))
-
-        # Applique la mise à jour du learning rate selon le scheduler (en fin d'epoch)
         scheduler.step()
+
+        if val_loader is not None:
+            val_acc = evaluate(model, device, val_loader)
+            print(f"Epoch {epoch+1:03d} | loss={loss.item():.4f} | val_acc={val_acc:.2f}%")
+
+            if use_early_stopping:
+                improved = (best_val is None) or (val_acc > best_val + early_stop_min_delta)
+                if improved:
+                    best_val = val_acc
+                    no_improve = 0
+                    best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+                else:
+                    no_improve += 1
+                    if no_improve >= early_stop_patience:
+                        print(f"Early stopping déclenché à l'epoch {epoch+1}")
+                        break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
 
 
 if __name__ == '__main__':
-    t0 = time.time()
-    train_ds = PointCloudData("/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/PointNetLab/data/ModelNet10_PLY")
-    test_ds = PointCloudData("/home/nochi/NOCHI/M2_PAR/Apprenyissage_Pointcloud/PointNetLab/data/ModelNet10_PLY", folder='test')
+    DATA_ROOT = "PointNetLab/data/ModelNet10_PLY"
 
-    inv_classes = {i: cat for cat, i in train_ds.classes.items()}
-    print("Classes: ", inv_classes)
-    print('Train dataset size: ', len(train_ds))
-    print('Test dataset size: ', len(test_ds))
-    print('Number of classes: ', len(train_ds.classes))
-    print('Sample pointcloud shape: ', train_ds[0]['pointcloud'].size())
-
-    train_loader = DataLoader(dataset=train_ds, batch_size=32, shuffle=True)
-    test_loader = DataLoader(dataset=test_ds, batch_size=32)
+    # Choisis ici les augmentations que tu veux composer
+    AUGMENTATIONS_TRAIN = ["normalize", "rot_z", "noise", "shuffle", "occlusion"]
+    AUGMENTATIONS_VAL = ["normalize"]
+    AUGMENTATIONS_TEST = ["normalize"]
 
 
+    VAL_RATIO = 0.2
+    SPLIT_SEED = 42
 
-    Tnet1 = Tnet(k=3)
-    Tnet2 = Tnet(k=64)
+    full_train_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_TRAIN))
+    full_train_eval_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_VAL))
+    test_ds = PointCloudData(DATA_ROOT, folder='test', transform=build_transforms(AUGMENTATIONS_TEST))
 
-    # model = PointMLP(classes=10)
-    # model = PointNetBasic(classes=10)
-    model = PointNetFull(classes=10, tnet1=Tnet1, tnet2 =Tnet2)
+    # Split train -> train_sub + val_sub (early stopping sur val, pas sur test)
+    rng = np.random.RandomState(SPLIT_SEED)
+    indices = np.arange(len(full_train_ds))
+    rng.shuffle(indices)
+    val_size = int(len(indices) * VAL_RATIO)
+    val_idx = indices[:val_size].tolist()
+    train_idx = indices[val_size:].tolist()
 
+    train_ds = Subset(full_train_ds, train_idx)
+    val_ds = Subset(full_train_eval_ds, val_idx)
 
-    # Récupère uniquement les paramètres "entraînables" du modèle :
-    # model.parameters() parcourt tous les poids/biais ; requires_grad=True => ils seront mis à jour par backprop
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=32, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=32, shuffle=False)
 
+    # Choix du modèle: PointMLP | PointNetBasic | PointNetFull
+    MODEL_NAME = "PointNetFull"
+    classes = len(full_train_ds.classes)
 
-    # Affiche le nombre total de paramètres entraînables :
-    # p.size() = dimensions du tenseur (ex: (512, 3072)), np.prod(...) = produit des dims => nb d'éléments
-    # sum(...) = addition sur tous les paramètres (poids + biais)
-    print("Number of parameters in the Neural Networks: ",
-          sum([np.prod(p.size()) for p in model_parameters]))
+    if MODEL_NAME == "PointMLP":
+        model = PointMLP(classes=classes)
+    elif MODEL_NAME == "PointNetBasic":
+        model = PointNetBasic(classes=classes)
+    elif MODEL_NAME == "PointNetFull":
+        model = PointNetFull(classes=classes)
+    else:
+        raise ValueError(f"Unknown model: {MODEL_NAME}")
 
-
-    # Choisit le device d'exécution :
-    # - si un GPU CUDA est dispo -> "cuda:0"
-    # - sinon -> CPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print("Device: ", device)
-
-    # Déplace le modèle sur ce device (tous ses paramètres seront sur GPU ou CPU)
     model.to(device)
 
+    print("Classes:", classes)
+    print("Train size:", len(train_ds), "Val size:", len(val_ds), "Test size:", len(test_ds))
+    print("Model:", MODEL_NAME, "Device:", device)
+    print("Augs train:", AUGMENTATIONS_TRAIN)
+    print("Augs val:", AUGMENTATIONS_VAL)
+    print("Augs test:", AUGMENTATIONS_TEST)
 
-    train(model, device, train_loader, test_loader, epochs=250)
-    print("Total time for training : ", time.time() - t0)
+    t0 = time.time()
+    train(model,
+          device,
+          train_loader,
+          val_loader=val_loader,
+          epochs=50,
+          lr=1e-3,
+          use_early_stopping=True,
+          early_stop_patience=8,
+          early_stop_min_delta=0.0)
+    test_acc = evaluate(model, device, test_loader)
+    print(f"Final TEST accuracy (évalué une seule fois): {test_acc:.2f}%")
+    print(f"Total time: {time.time() - t0:.1f}s")
