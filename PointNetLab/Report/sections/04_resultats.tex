@@ -1,31 +1,76 @@
-\chapter{Résultats}
+\chapter{Resultats}
 
-\section{Synthèse quantitative}
-Le tableau~\ref{tab:main-results} résume les principaux résultats consolidés.
+\section{Campagne augmentation seed 42 (25 epochs)}
+Le benchmark du 8 fevrier 2026 compare 10 configurations autour de PointNetFull.
+Les meilleures configurations en \texttt{best\_val\_acc} sont presentees dans le tableau~\ref{tab:aug-20260208}.
 
 \begin{table}[H]
 \centering
-\caption{Résultats principaux (ModelNet10).}
-\label{tab:main-results}
-\begin{tabular}{lcc}
+\caption{Top configurations --- campagne \texttt{20260208\_145104}.}
+\label{tab:aug-20260208}
+\begin{tabular}{lccc}
 \toprule
-Configuration & Validation (best) & Test final \\
+Configuration & best\_val\_acc (\%) & best\_epoch & final\_val\_acc (\%) \\
 \midrule
-Baseline (normalize+rot\_z+noise+shuffle) & 91.98\% & 86.89\% \\
-Baseline + occlusion & 94.49\% & 89.65\% \\
-Baseline + combo large & 94.36\% & 89.21\% \\
+plus\_jitter & 91.08 & 23 & 86.67 \\
+plus\_mirror & 90.75 & 21 & 87.56 \\
+plus\_occlusion & 90.42 & 23 & 89.76 \\
+baseline & 90.31 & 23 & 88.77 \\
+combo\_full & 90.09 & 22 & 90.09 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Courbes d'apprentissage}
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.85\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/plus_occlusion_curves.png}
-  \caption{Exemple de courbes (configuration occlusion).}
+  \includegraphics[width=0.82\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/global_best_val_accuracy_bar.png}
+  \caption{Comparaison globale des \texttt{best\_val\_acc} (campagne du 08/02/2026).}
+  \label{fig:global-bar-20260208}
 \end{figure}
 
-\section{Matrices de confusion}
+\section{Benchmark robuste (seed 1, max 50 epochs)}
+Le benchmark du 11 fevrier 2026 confirme que \texttt{plus\_occlusion} reste en tete parmi les 4 configurations testees (Table~\ref{tab:robust-20260211}).
+
+\begin{table}[H]
+\centering
+\caption{Synthese --- benchmark robuste \texttt{20260211\_081948}.}
+\label{tab:robust-20260211}
+\begin{tabular}{lccc}
+\toprule
+Configuration & best\_val\_acc (\%) & best\_epoch & final\_val\_acc (\%) \\
+\midrule
+plus\_occlusion & 88.33 & 21 & 87.33 \\
+combo\_full & 88.22 & 18 & 88.00 \\
+baseline & 86.45 & 10 & 81.61 \\
+plus\_jitter & 86.12 & 7 & 83.81 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Run de reference du notebook final}
+Le run final du notebook (seed 42) donne:
+\begin{itemize}
+  \item \texttt{MAX\_VAL\_ACC = 94.36\%} (sur 150 epochs),
+  \item \texttt{Final TEST accuracy = 90.09\%},
+  \item \texttt{Final TEST loss = 0.4077}.
+\end{itemize}
+Ces valeurs sont celles affichees directement dans la sortie du notebook final.
+
+\section{Run cible occlusion (seed 0)}
+Dans la campagne \texttt{20260211\_143359}, le run \texttt{plus\_occlusion/seed\_0} atteint:
+\begin{itemize}
+  \item \texttt{best\_val\_acc = 90.09\%} (epoch 23),
+  \item \texttt{best\_eval\_acc = 89.43\%},
+  \item \texttt{final\_val\_acc = 88.55\%} apres early stopping.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\linewidth]{../Code/reports/pointnetfull_aug_suite_20260211_143359/runs/plus_occlusion/seed_0/curves.png}
+  \caption{Courbes d'entrainement du run \texttt{plus\_occlusion, seed\_0}.}
+  \label{fig:occlusion-seed0-curves}
+\end{figure}
+
 \begin{figure}[H]
   \centering
   \begin{subfigure}{0.48\linewidth}
@@ -36,8 +81,9 @@ Baseline + combo large & 94.36\% & 89.21\% \\
   \hfill
   \begin{subfigure}{0.48\linewidth}
     \centering
-    \includegraphics[width=\linewidth]{../Code/reports/pointnetfull_aug_suite_20260208_145104/figures/plus_occlusion_confusion_matrix.png}
-    \caption{Baseline + occlusion}
+    \includegraphics[width=\linewidth]{../Code/reports/pointnetfull_aug_suite_20260211_143359/runs/plus_occlusion/seed_0/confusion_matrix.png}
+    \caption{Plus occlusion (seed 0)}
   \end{subfigure}
-  \caption{Comparaison des confusions par classe.}
+  \caption{Comparaison qualitative des matrices de confusion.}
+  \label{fig:cm-compare}
 \end{figure}

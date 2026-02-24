@@ -1,17 +1,27 @@
 \chapter{Introduction}
 
 \section{Contexte}
-Les nuages de points 3D sont une représentation légère et directe de la géométrie.
-Contrairement aux voxels ou aux vues multi-images, ils sont non structurés et invariants à l'ordre des points.
-PointNet répond à ce défi en combinant des MLP partagés et une agrégation symétrique par max-pooling~\cite{qi2017pointnet}.
+Les nuages de points 3D sont une representation compacte de la geometrie, mais ils sont non structures et non ordonnes.
+Les architectures CNN classiques sur grilles regulares sont donc mal adaptees sans conversion (voxels, projections multi-vues).
+PointNet traite directement les points en combinant des MLP partages et une aggregation symetrique de type max-pooling~\cite{qi2017pointnet}.
 
 \section{Objectifs du projet}
-Le projet poursuit trois objectifs~:
+L'enonce du \emph{PointNet Lab} fixe trois objectifs principaux:
 \begin{itemize}
-  \item implémenter et évaluer une baseline \textbf{PointMLP} ;
-  \item implémenter \textbf{PointNet} en version basique puis avec \textbf{T-Net} ;
-  \item étudier l'impact de la \textbf{data augmentation} 3D sur la généralisation.
+  \item implementer un \textbf{PointMLP} (Exercice~1) et mesurer sa performance de classification;
+  \item implementer \textbf{PointNetBasic} puis \textbf{PointNetFull avec T-Net 3\(\times\)3} (Exercice~2), et comparer les resultats;
+  \item proposer et evaluer une nouvelle augmentation 3D (Exercice~3), en comparaison avec la baseline.
 \end{itemize}
 
-\section{Données}
-Les expériences utilisent ModelNet10 (nuages PLY, 1024 points par objet), issu de la famille ModelNet~\cite{wu20153dshapenets}.
+\section{Perimetre experimental}
+Les experiments sont menes sur \textbf{ModelNet10\_PLY} (1024 points par objet, 10 classes), issu de la famille ModelNet~\cite{wu20153dshapenets}.
+Le code final est consolide dans \texttt{Code/pointnet\_notebook.ipynb}, avec une logique de split train/validation/test et des campagnes automatisees de benchmark dans \texttt{Code/reports}.
+
+\section{Contributions du rapport}
+Ce document apporte:
+\begin{itemize}
+  \item une synthese claire des choix d'architecture et d'entrainement;
+  \item un protocole experimental reproductible (seeds, early stopping, metriques);
+  \item une lecture critique des campagnes d'augmentation, avec focus sur \emph{baseline + occlusion};
+  \item un etat des lieux coherent avec les sorties deja generees et le fine-tuning en cours (seed~45).
+\end{itemize}

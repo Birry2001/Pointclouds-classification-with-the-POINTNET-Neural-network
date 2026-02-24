@@ -1,6 +1,8 @@
 \chapter{Conclusion}
-Ce projet a permis d'implémenter PointMLP et PointNet en PyTorch, puis de construire un protocole expérimental propre
-(train/val/test séparés, early stopping sur validation, test final unique).
 
-Le résultat final atteint environ \textbf{90\%} d'accuracy test sur ModelNet10 avec une configuration
-\textbf{baseline + occlusion}, ce qui constitue un compromis performant et lisible pour ce TP.
+Ce projet a permis d'implementer les trois briques demandees dans l'enonce (PointMLP, PointNetBasic, PointNetFull avec T-Net 3\(\times\)3) et de structurer un protocole experimental reproductible.
+
+Les campagnes montrent qu'une strategie d'augmentation \textbf{simple et ciblee} (notamment l'occlusion) est plus robuste qu'une accumulation systematique de transformations.
+Le meilleur resultat actuellement documente dans le notebook final atteint \textbf{90.09\%} d'accuracy test sur ModelNet10.
+
+La suite immediate consiste a consolider la comparaison multi-seeds (dont seed~45 en cours), puis a figer une table finale \emph{mean\(\pm\)std} pour la version definitive du rapport.

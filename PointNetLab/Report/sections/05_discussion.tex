@@ -1,22 +1,25 @@
 \chapter{Discussion}
 
-\section{Analyse}
-Les résultats confirment que l'occlusion est la transformation la plus utile dans notre contexte.
-Elle améliore la robustesse sans la complexité d'un pipeline d'augmentations trop chargé.
-
-Le gain en test (\textasciitilde +2.8 points entre baseline et baseline+occlusion) est cohérent
-avec l'objectif de généralisation sur des nuages partiellement observés.
-
-\section{Limites}
+\section{Lectures principales}
+Trois constats ressortent des campagnes disponibles:
 \begin{itemize}
-  \item Évaluation sur un nombre limité de seeds ;
-  \item Pas d'étude exhaustive des hyperparamètres d'occlusion (rayon/probabilité) dans la version finale ;
-  \item Résultats centrés sur ModelNet10.
+  \item l'\textbf{occlusion} est systematiquement competitive et souvent premiere dans les protocoles les plus contraints;
+  \item les combinaisons lourdes d'augmentations ne garantissent pas de gain stable par rapport a une politique plus simple;
+  \item la configuration du monitor d'early stopping (\texttt{val\_acc} vs \texttt{val\_loss}) influence notablement l'epoch retenue et les metriques finales.
 \end{itemize}
 
-\section{Pistes immédiates}
+\section{Interpretation}
+L'occlusion aleatoire est pertinente pour ModelNet10 car elle force le reseau a reconnaitre des formes partielles.
+Cela ameliore la robustesse a la disparition locale de points, ce qui est coherent avec des scenes reelles ou les acquisitions sont incompletes.
+Le gain en test du notebook final (\(90.09\%\)) valide ce choix pour la version courante du projet.
+
+\section{Limites actuelles}
 \begin{itemize}
-  \item moyenner sur 3 seeds et rapporter mean$\pm$std ;
-  \item ablation fine du rayon d'occlusion ;
-  \item extension à ModelNet40.
+  \item les benchmarks robustes ne couvrent pas encore un vrai multi-seeds complet (plusieurs tables ont \texttt{num\_runs = 1});
+  \item la comparaison Exercice 1 / Exercice 2 reste surtout architecturale dans cette version du rapport, faute de tableaux consolides homogènes sur la meme grille d'essais;
+  \item l'evaluation est concentree sur ModelNet10, sans extension ModelNet40.
 \end{itemize}
+
+\section{Etat en cours}
+Au moment de redaction, un fine-tuning \texttt{baseline + occlusion} en \texttt{seed 45} est en cours.
+Il est prevu d'ajouter ses metriques finales (accuracy, loss, matrice de confusion) dans le tableau de comparaison principal des que le run est termine.

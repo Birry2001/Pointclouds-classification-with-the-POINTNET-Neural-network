@@ -1,22 +1,50 @@
-\chapter{Protocole expérimental}
+\chapter{Protocole experimental}
 
-\section{Découpage des données}
-Le protocole final utilise~:
+\section{Jeux de donnees et splits}
+Le notebook final utilise:
 \begin{itemize}
-  \item train/validation via split du train set (~80/20),
-  \item test utilisé \textbf{uniquement} en fin d'entraînement.
+  \item train: \textbf{3193} exemples,
+  \item validation: \textbf{798} exemples,
+  \item test: \textbf{908} exemples.
 \end{itemize}
-Ce choix évite toute fuite d'information vers le test.
+Le split est derive du train officiel avec \texttt{VAL\_RATIO = 0.2} et \texttt{seed = 42}, puis le test officiel est conserve pour l'evaluation finale.
 
-\section{Reproductibilité}
-Un seed global est fixé (42), utilisé pour le split et les tirages aléatoires,
-avec un early stopping piloté sur la métrique de validation.
-
-\section{Configuration finale}
-Configuration principale reportée dans le notebook~:
+\section{Configuration du notebook final}
+Configuration extraite de \texttt{Code/pointnet\_notebook.ipynb}:
 \begin{itemize}
-  \item classes: 10,
-  \item train: 3193, validation: 798, test: 908,
-  \item patience early stopping: 15,
-  \item augmentations train: \texttt{normalize, rot\_z, noise, shuffle, occlusion}.
+  \item modele: \texttt{PointNetFull},
+  \item augmentations train: \texttt{[normalize, rot\_z, noise, shuffle, occlusion]},
+  \item augmentation test: \texttt{[normalize]},
+  \item \texttt{MAX\_EPOCHS = 150},
+  \item early stopping active (monitor \texttt{val\_acc}, patience \texttt{50}, min\_delta \texttt{0.0}),
+  \item scheduler de taux d'apprentissage actif.
 \end{itemize}
+
+\section{Campagnes automatisees complementaires}
+En parallele du notebook, des campagnes de benchmark ont ete lancees avec le script robuste.
+Table~\ref{tab:campaigns} resume les runs principaux exploites dans ce rapport.
+
+\begin{table}[H]
+\centering
+\caption{Campagnes experimentales utilisees.}
+\label{tab:campaigns}
+\begin{tabular}{p{0.22\linewidth}p{0.15\linewidth}p{0.57\linewidth}}
+\toprule
+Campagne & Date & Usage dans le rapport \\
+\midrule
+C1 (20260208\_145104) & 08/02/2026 & benchmark de 10 augmentations (seed 42, 25 epochs) \\
+C2 (20260211\_081948) & 11/02/2026 & benchmark robuste (4 experiences, seed 1, max 50 epochs, early stop) \\
+C3 (20260211\_143359) & 11/02/2026 & run cible \texttt{plus\_occlusion, seed\_0} (max 150 epochs, monitor val\_loss) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Metriques reportees}
+Selon les sorties disponibles, on suit principalement:
+\begin{itemize}
+  \item \texttt{best\_val\_acc} et \texttt{best\_val\_loss},
+  \item \texttt{best\_eval\_acc} quand presente,
+  \item \texttt{final\_test\_acc} pour le notebook final,
+  \item matrices de confusion et courbes d'apprentissage.
+\end{itemize}
+Cette distinction est importante pour eviter de melanger validation interne et evaluation finale.

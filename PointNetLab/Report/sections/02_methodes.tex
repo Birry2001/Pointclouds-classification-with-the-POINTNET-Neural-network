@@ -1,26 +1,37 @@
-\chapter{Méthodes}
+\chapter{Methodes}
+
+\section{Donnees et pretraitement}
+Chaque objet est represente par un nuage de \(1024\) points \((x,y,z)\).
+Le pipeline de base applique la normalisation, la rotation autour de \(z\), un bruit gaussien et le melange des points.
+Pour les tests finaux, la transformation est volontairement plus stable (normalisation uniquement).
 
 \section{PointMLP (Exercice 1)}
-Le premier modèle aplatit le nuage ($1024\times3=3072$) puis applique~:
+PointMLP applique un flatten \(1024\times 3 = 3072\) puis un MLP global:
 \begin{align}
 3072 \rightarrow 512 \rightarrow 256 \rightarrow N_{classes}
 \end{align}
-avec BatchNorm, ReLU, Dropout ($p=0.3$) et LogSoftmax en sortie.
+avec BatchNorm, ReLU, Dropout \((p=0.3)\) et LogSoftmax en sortie.
+Cette architecture sert de baseline simple, sans invariance explicite a l'ordre des points.
 
-\section{PointNet basique (Exercice 2.1)}
-PointNet basique applique des convolutions 1D de type MLP partagé sur les points,
-produit un descripteur global via max-pooling, puis un classifieur fully-connected.
+\section{PointNetBasic (Exercice 2.1)}
+PointNetBasic utilise des MLP partages (\texttt{Conv1d} noyau 1) sur chaque point, puis un max-pooling global.
+Le descripteur global est ensuite classe par un MLP fully-connected.
+Cette structure rend le modele invariant a la permutation des points.
 
-\section{PointNet avec T-Net (Exercice 2.2)}
-La version complète inclut un T-Net d'alignement $3\times3$ et un terme de régularisation
-encourageant l'orthogonalité de la transformation.
+\section{PointNetFull avec T-Net (Exercice 2.2)}
+La version complete ajoute un T-Net \(3\times 3\) qui apprend une transformation d'alignement en entree.
+La perte totale est:
+\begin{align}
+\mathcal{L} = \mathcal{L}_{CE} + \lambda \left\lVert I - A A^\top \right\rVert_F^2
+\end{align}
+ou \(A\) est la matrice predite par le T-Net.
+Le second terme regularise la transformation vers une matrice proche d'une rotation.
 
-\section{Augmentations 3D retenues}
-Le pipeline final retenu est volontairement simple et stable~:
+\section{Augmentations 3D comparees (Exercice 3)}
+Les campagnes automatisees comparent plusieurs variantes autour d'une baseline commune:
 \begin{itemize}
-  \item \texttt{normalize} (sphère unité),
-  \item rotation aléatoire autour de $z$,
-  \item bruit gaussien,
-  \item shuffle des points,
-  \item occlusion sphérique.
+  \item \texttt{baseline}: rotation\_z + bruit gaussien;
+  \item augmentations unitaires: \texttt{jitter}, \texttt{mirror}, \texttt{scale}, \texttt{translate}, \texttt{dropout}, \texttt{occlusion};
+  \item combinaisons: \texttt{combo\_geo}, \texttt{combo\_robust}, \texttt{combo\_full}.
 \end{itemize}
+L'augmentation la plus suivie dans la phase finale est l'\textbf{occlusion spherique aleatoire} (rayon et probabilite controles), car elle force le modele a apprendre des indices partiels plus robustes.
