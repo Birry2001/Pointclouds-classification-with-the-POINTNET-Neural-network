@@ -1,97 +1,63 @@
-\documentclass[11pt,a4paper]{report}
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage[french]{babel}
-\usepackage{lmodern}
-\usepackage{geometry}
-\geometry{margin=2.5cm}
-\usepackage{graphicx}
+\documentclass{rapportENSIAS}
+
 \usepackage{booktabs}
-\usepackage{array}
-\usepackage{amsmath}
-\usepackage{siunitx}
-\usepackage{hyperref}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{csquotes}
-\usepackage{fancyhdr}
-\usepackage{xcolor}
-
-\hypersetup{
-  colorlinks=true,
-  linkcolor=blue!50!black,
-  citecolor=blue!50!black,
-  urlcolor=blue!50!black
+\usepackage{tabularx}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shapes.geometric}
+\tikzset{
+    input/.style={draw, ellipse, minimum height=2em, minimum width=3cm, align=center, fill=green!10},
+    layer/.style={draw, rectangle, minimum height=2.5em, minimum width=3.5cm, align=center, fill=blue!10, rounded corners},
+    pool/.style={draw, rectangle, minimum height=2.5em, minimum width=3.5cm, align=center, fill=orange!10, rounded corners},
+    tnet/.style={draw, rectangle, minimum height=2.5em, minimum width=3.5cm, align=center, fill=purple!10, rounded corners, thick},
+    aug/.style={draw, rectangle, minimum height=2.5em, minimum width=3cm, align=center, fill=teal!10},
+    op/.style={draw, circle, minimum size=2.1em, align=center, fill=red!10},
+    arrow/.style={-Latex, thick},
+    dashed-arrow/.style={-Latex, thick, dashed}
 }
+\captionsetup{labelfont=bf,textfont=it}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\raggedbottom
+\renewcommand{\bibname}{Bibliographie}
 
-\captionsetup{font=small}
-
-\newcommand{\TitreRapport}{Classification de nuages de points 3D avec PointNet}
-\newcommand{\SousTitreRapport}{Master PAR --- Lab PointNet}
-\newcommand{\AuteurRapport}{NOCHI MAGOUO}
-\newcommand{\Encadrants}{Jean-Emmanuel DESCHAUD \\ Paul CHECCHIN}
-\newcommand{\UE}{3D Deep Learning}
-\newcommand{\Annee}{2025--2026}
-
-\newcommand{\fairepagedegarde}{%
-\begin{titlepage}
-\centering
-\vspace*{0.8cm}
-\includegraphics[width=0.22\textwidth]{report_assets/ensias.png}\par
-\vspace{0.7cm}
-{\Large Ecole Universitaire de Physique et d'Ingenierie\par}
-\vspace{0.25cm}
-{\large \UE\par}
-\vspace{0.2cm}
-{\large \Annee\par}
-
-\vfill
-{\Large \textbf{Rapport de projet}}\par
-\vspace{0.4cm}
-{\huge \textbf{\TitreRapport}}\par
-\vspace{0.3cm}
-{\Large \SousTitreRapport}\par
-\vspace{0.7cm}
-\rule{0.88\textwidth}{0.5pt}\par
-\vspace{0.9cm}
-
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.44\textwidth} >{\raggedright\arraybackslash}p{0.44\textwidth}}
-\textbf{Realise par} & \textbf{Encadrants} \\
-\AuteurRapport & \Encadrants \\
-\end{tabular}
-
-\vfill
-{\large \today\par}
-\end{titlepage}
-}
-
-\pagestyle{fancy}
-\fancyhf{}
-\lhead{PointNet Lab --- M2 PAR}
-\rhead{\nouppercase{\leftmark}}
-\cfoot{\thepage}
-\setlength{\headheight}{14pt}
+\title{Classification de nuages de points 3D avec PointNet}
+\date{}
 
 \begin{document}
 
-\hypersetup{pageanchor=false}
+%----------- Informations du rapport ---------
+\titre{Classification de nuages de points 3D avec PointNet}
+\UE{Master PAR -- 3D Deep Learning}
+\sujet{Rapport de projet PointNetLab}
+\enseignant{Paul CHECCHIN}
+\eleves{NOCHI MAGOUO}
+
+%----------- Initialisation -------------------
+\fairemarges
 \fairepagedegarde
 
 \pagenumbering{roman}
 \tableofcontents
 \listoffigures
+\newpage
 \listoftables
+\newpage
+
 \clearpage
 \pagenumbering{arabic}
-\hypersetup{pageanchor=true}
 
 \chapter*{Resume}
 \addcontentsline{toc}{chapter}{Resume}
-Ce rapport presente l'implementation en PyTorch des exercices PointMLP, PointNetBasic et PointNetFull (T-Net 3\(\times\)3), puis l'etude de plusieurs strategies de data augmentation sur ModelNet10.
-La campagne de reference du notebook final atteint \textbf{90.09\%} d'accuracy test avec la configuration \emph{baseline + occlusion}.
-Les campagnes automatisees confirment que l'occlusion reste l'une des augmentations les plus robustes selon les metriques de validation/evaluation disponibles.
+Dans ce rapport, je montre ma progression sur le projet PointNetLab: implementation des architectures, lecture de l'article PointNet, campagnes d'augmentation, et justification des choix experimentaux.
+Mon objectif n'est pas seulement d'obtenir un score eleve, mais de justifier une demarche scientifique adaptee au traitement de point clouds.
 
+%------------ Corps du rapport ----------------
 \input{sections/01_introduction}
 \input{sections/02_methodes}
 \input{sections/03_protocole_experimental}
@@ -99,9 +65,10 @@ Les campagnes automatisees confirment que l'occlusion reste l'une des augmentati
 \input{sections/05_discussion}
 \input{sections/06_conclusion}
 
+%------------ Bibliographie -------------------
 \clearpage
-\addcontentsline{toc}{chapter}{Bibliographie}
-\bibliographystyle{plain}
+\addcontentsline{toc}{chapter}{\bibname}
+\bibliographystyle{unsrt}
 \bibliography{references}
 
 \end{document}

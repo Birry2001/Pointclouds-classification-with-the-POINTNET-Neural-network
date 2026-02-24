@@ -1,8 +1,13 @@
 \chapter{Conclusion}
 
-Ce projet a permis d'implementer les trois briques demandees dans l'enonce (PointMLP, PointNetBasic, PointNetFull avec T-Net 3\(\times\)3) et de structurer un protocole experimental reproductible.
+Dans ce travail, j'ai essaye de montrer a la fois les resultats et la logique qui m'y conduit.
+J'ai implemente les trois etapes demandees (PointMLP, PointNetBasic, PointNetFull), puis j'ai construit une comparaison experimentale pour choisir une politique d'augmentation defendable.
 
-Les campagnes montrent qu'une strategie d'augmentation \textbf{simple et ciblee} (notamment l'occlusion) est plus robuste qu'une accumulation systematique de transformations.
-Le meilleur resultat actuellement documente dans le notebook final atteint \textbf{90.09\%} d'accuracy test sur ModelNet10.
+La conclusion que je retiens est la suivante: pour mon contexte de point clouds ModelNet10, l'occlusion est l'augmentation la plus pertinente pour un bon compromis robustesse / performance.
 
-La suite immediate consiste a consolider la comparaison multi-seeds (dont seed~45 en cours), puis a figer une table finale \emph{mean\(\pm\)std} pour la version definitive du rapport.
+La suite immediate est claire:
+\begin{itemize}
+  \item finaliser l'export du run seed 50 et renseigner ses metriques dans les tableaux,
+  \item etendre la comparaison multi-seeds en \emph{mean\(\pm\)std},
+  \item puis figer une version finale courte et propre pour la soumission.
+\end{itemize}

@@ -1,50 +1,90 @@
-\chapter{Protocole experimental}
+\chapter{Protocole experimental et demarche scientifique}
 
-\section{Jeux de donnees et splits}
-Le notebook final utilise:
+\section{Comment j'ai structure ma demarche}
+Le professeur a insiste sur la demarche scientifique; j'ai donc structure mes essais comme suit:
+\begin{enumerate}
+  \item je pose une hypothese (ex: l'occlusion doit mieux simuler les cas reels de points manquants);
+  \item je fais varier un facteur principal a la fois;
+  \item je garde des constantes (dataset, architecture de reference, batch size, metriques);
+  \item j'analyse a la fois les chiffres et les visuels (courbes, matrices de confusion, nuages augmentes);
+  \item je ne retiens une decision que si elle reste defendable sur plusieurs runs.
+\end{enumerate}
+
+\section{Donnees et constantes de travail}
+Dans mon notebook final, j'utilise:
 \begin{itemize}
-  \item train: \textbf{3193} exemples,
-  \item validation: \textbf{798} exemples,
-  \item test: \textbf{908} exemples.
-\end{itemize}
-Le split est derive du train officiel avec \texttt{VAL\_RATIO = 0.2} et \texttt{seed = 42}, puis le test officiel est conserve pour l'evaluation finale.
-
-\section{Configuration du notebook final}
-Configuration extraite de \texttt{Code/pointnet\_notebook.ipynb}:
-\begin{itemize}
-  \item modele: \texttt{PointNetFull},
-  \item augmentations train: \texttt{[normalize, rot\_z, noise, shuffle, occlusion]},
-  \item augmentation test: \texttt{[normalize]},
-  \item \texttt{MAX\_EPOCHS = 150},
-  \item early stopping active (monitor \texttt{val\_acc}, patience \texttt{50}, min\_delta \texttt{0.0}),
-  \item scheduler de taux d'apprentissage actif.
+  \item ModelNet10\_PLY (10 classes, 1024 points/objet),
+  \item split: train 3193 / val 798 / test 908,
+  \item PointNetFull comme modele de reference pour les campagnes d'augmentation,
+  \item scheduler actif et early stopping pilote sur la validation,
+  \item test execute en fin de run seulement.
 \end{itemize}
 
-\section{Campagnes automatisees complementaires}
-En parallele du notebook, des campagnes de benchmark ont ete lancees avec le script robuste.
-Table~\ref{tab:campaigns} resume les runs principaux exploites dans ce rapport.
+\section{Pipeline de pretraitement et augmentation}
+\begin{figure}[H]
+  \centering
+  \resizebox{0.98\linewidth}{!}{%
+  \begin{tikzpicture}[node distance=0.7cm and 0.5cm]
+      \node[input, fill=blue!10] (raw) {Raw Point Cloud \\ (ModelNet10\_PLY)};
 
+      \node[aug, below=of raw] (norm) {UnitSphereNormalize};
+      \node[aug, right=of norm] (rot) {RandomRotationZ};
+      \node[aug, right=of rot] (scale) {RandomScale};
+      \node[aug, right=of scale] (trans) {RandomTranslate};
+      \node[aug, right=of trans] (noise) {RandomJitterClip /\\RandomNoise};
+
+      \node[aug, below=of noise] (shuffle) {ShufflePoints};
+      \node[aug, left=of shuffle] (tensor) {ToTensor};
+      \node[input, fill=red!10, left=of tensor] (batch) {PyTorch Tensor\\$(N \times 3)$};
+
+      \draw[arrow] (raw) -- (norm);
+      \draw[arrow] (norm) -- (rot);
+      \draw[arrow] (rot) -- (scale);
+      \draw[arrow] (scale) -- (trans);
+      \draw[arrow] (trans) -- (noise);
+      \draw[arrow] (noise) -- (shuffle);
+      \draw[arrow] (shuffle) -- (tensor);
+      \draw[arrow] (tensor) -- (batch);
+
+      \draw[thick, dashed, gray, rounded corners]
+          ($(norm.north west)+(-0.3, 0.3)$) rectangle ($(noise.south east)+(0.3, -0.3)$);
+      \node[above, gray] at ($(scale.north)+(0, 0.4)$) {Operations stochastiques (Data Augmentation)};
+  \end{tikzpicture}
+  }
+  \caption{Pipeline de pretraitement/augmentation conforme aux classes du notebook.}
+  \label{fig:aug-pipeline-notebook}
+\end{figure}
+
+\noindent\textbf{Analyse.} Cette representation m'aide a montrer que les augmentations ne sont pas appliquees "au hasard":
+je normalise d'abord la geometrie globale, puis j'injecte des variations stochastiques realistes (\texttt{RandomRotationZ}, \texttt{RandomScale}, \texttt{RandomTranslate}, \texttt{RandomJitterClip}/\texttt{RandomNoise}) avant conversion en tenseur.
+Cette logique est coherente avec le traitement de point clouds et guide l'interpretation des resultats de chaque run.
+
+\section{Role de chaque bloc de runs}
 \begin{table}[H]
 \centering
-\caption{Campagnes experimentales utilisees.}
-\label{tab:campaigns}
-\begin{tabular}{p{0.22\linewidth}p{0.15\linewidth}p{0.57\linewidth}}
+\caption{Pourquoi j'ai lance chaque type de run.}
+\label{tab:runs-purpose}
+\begin{tabular}{p{0.23\linewidth}p{0.33\linewidth}p{0.38\linewidth}}
 \toprule
-Campagne & Date & Usage dans le rapport \\
+Bloc & Configurations & Question a laquelle je veux repondre \\
 \midrule
-C1 (20260208\_145104) & 08/02/2026 & benchmark de 10 augmentations (seed 42, 25 epochs) \\
-C2 (20260211\_081948) & 11/02/2026 & benchmark robuste (4 experiences, seed 1, max 50 epochs, early stop) \\
-C3 (20260211\_143359) & 11/02/2026 & run cible \texttt{plus\_occlusion, seed\_0} (max 150 epochs, monitor val\_loss) \\
+Baseline controlee & baseline (rot\_z + bruit) & Quel est mon niveau de base? \\
+Ablations unitaires & +jitter, +mirror, +scale, +translate, +dropout, +occlusion & Quelle augmentation apporte un vrai gain seule? \\
+Combinaisons & combo\_geo, combo\_robust, combo\_full & Les gains se cumulent-ils reellement? \\
+Benchmark robuste & baseline, +jitter, +occlusion, combo\_full & Le classement reste-t-il stable sous autre protocole? \\
+Fine-tuning final & baseline + occlusion (seed 42, 45, puis nouveau seed) & Le choix final tient-il au test final? \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Metriques reportees}
-Selon les sorties disponibles, on suit principalement:
+\noindent\textbf{Analyse.} Ce tableau resume ma logique de validation: je passe d'abord par des ablations, puis je verifie la robustesse avant de figer le choix final.
+
+\section{Metriques suivies}
 \begin{itemize}
-  \item \texttt{best\_val\_acc} et \texttt{best\_val\_loss},
-  \item \texttt{best\_eval\_acc} quand presente,
-  \item \texttt{final\_test\_acc} pour le notebook final,
-  \item matrices de confusion et courbes d'apprentissage.
+  \item \texttt{best\_val\_acc}: meilleure accuracy validation pendant l'entrainement;
+  \item \texttt{final\_val\_acc}: accuracy validation au dernier epoch execute;
+  \item \texttt{best\_eval\_acc}: score du checkpoint selectionne;
+  \item \texttt{final test accuracy}: mesure finale sur test en fin de run.
 \end{itemize}
-Cette distinction est importante pour eviter de melanger validation interne et evaluation finale.
+
+\noindent\textbf{Analyse.} Cette separation m'evite de confondre une bonne dynamique de validation avec une vraie generalisation sur test.

@@ -6,10 +6,4 @@ Charles~R. Qi, Hao Su, Kaichun Mo, and Leonidas~J. Guibas.
   segmentation.
 \newblock In {\em CVPR}, 2017.
 
-\bibitem{wu20153dshapenets}
-Zhirong Wu, Shuran Song, Aditya Khosla, Fisher Yu, Linguang Zhang, Xiaoou Tang,
-  and Jianxiong Xiao.
-\newblock 3d shapenets: A deep representation for volumetric shapes.
-\newblock {\em CVPR}, 2015.
-
 \end{thebibliography}

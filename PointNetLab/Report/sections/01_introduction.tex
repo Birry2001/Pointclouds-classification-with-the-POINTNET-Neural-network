@@ -1,27 +1,25 @@
 \chapter{Introduction}
 
-\section{Contexte}
-Les nuages de points 3D sont une representation compacte de la geometrie, mais ils sont non structures et non ordonnes.
-Les architectures CNN classiques sur grilles regulares sont donc mal adaptees sans conversion (voxels, projections multi-vues).
-PointNet traite directement les points en combinant des MLP partages et une aggregation symetrique de type max-pooling~\cite{qi2017pointnet}.
+\section{Contexte du module}
+Dans ce module, je travaille sur le traitement de nuages de points 3D.
+Un point cloud est un ensemble de points \((x,y,z)\) non ordonnes: je ne peux donc pas supposer un voisinage fixe comme dans une image 2D.
+Le probleme principal est de construire un modele qui respecte cette structure en ensemble.
 
-\section{Objectifs du projet}
-L'enonce du \emph{PointNet Lab} fixe trois objectifs principaux:
+\section{Lien avec l'article PointNet}
+Le projet est inspire de l'article \textit{PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation}~\cite{qi2017pointnet}.
+Avant d'implementer mes reseaux, j'ai essaye de comprendre sa logique:
 \begin{itemize}
-  \item implementer un \textbf{PointMLP} (Exercice~1) et mesurer sa performance de classification;
-  \item implementer \textbf{PointNetBasic} puis \textbf{PointNetFull avec T-Net 3\(\times\)3} (Exercice~2), et comparer les resultats;
-  \item proposer et evaluer une nouvelle augmentation 3D (Exercice~3), en comparaison avec la baseline.
+  \item traiter directement les points, sans voxelisation lourde;
+  \item apprendre des descripteurs locaux par point via des MLP partages;
+  \item utiliser une fonction symetrique (max-pooling) pour obtenir une invariance a l'ordre des points;
+  \item ajouter un T-Net pour stabiliser l'alignement geometrique en entree.
 \end{itemize}
 
-\section{Perimetre experimental}
-Les experiments sont menes sur \textbf{ModelNet10\_PLY} (1024 points par objet, 10 classes), issu de la famille ModelNet~\cite{wu20153dshapenets}.
-Le code final est consolide dans \texttt{Code/pointnet\_notebook.ipynb}, avec une logique de split train/validation/test et des campagnes automatisees de benchmark dans \texttt{Code/reports}.
-
-\section{Contributions du rapport}
-Ce document apporte:
+\section{Objectif de mon rapport}
+Je veux montrer que je comprends ce que je fais, et pas seulement que j'obtiens un score.
+Concretement, je documente:
 \begin{itemize}
-  \item une synthese claire des choix d'architecture et d'entrainement;
-  \item un protocole experimental reproductible (seeds, early stopping, metriques);
-  \item une lecture critique des campagnes d'augmentation, avec focus sur \emph{baseline + occlusion};
-  \item un etat des lieux coherent avec les sorties deja generees et le fine-tuning en cours (seed~45).
+  \item mon evolution de PointMLP vers PointNet;
+  \item ma methode experimentale (runs, controles, comparaison);
+  \item pourquoi j'ai retenu \texttt{baseline + occlusion} en fin de projet.
 \end{itemize}
