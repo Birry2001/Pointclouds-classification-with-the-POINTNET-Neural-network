@@ -1,9 +1,0 @@
-\begin{thebibliography}{1}
-
-\bibitem{qi2017pointnet}
-Charles~R. Qi, Hao Su, Kaichun Mo, and Leonidas~J. Guibas.
-\newblock Pointnet: Deep learning on point sets for 3d classification and
-  segmentation.
-\newblock In {\em CVPR}, 2017.
-
-\end{thebibliography}

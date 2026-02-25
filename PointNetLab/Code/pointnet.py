@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-# PointNet for point cloud classification (clean TP version)
+# PointNet pour la classification de nuages de points 
+# Le script est structuré en 4 blocs :
+# (1) données/augmentations, (2) modèles, (3) pertes + entraînement, (4) exécution.
 
 import math
 import os
@@ -14,7 +16,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 
-# Force local module resolution to avoid conflict with external "ply" package
+# Force l'import local pour éviter un conflit avec un package externe nommé "ply".
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR in sys.path:
     sys.path.remove(_THIS_DIR)
@@ -23,7 +25,7 @@ from ply import read_ply
 
 
 # -----------------------------
-# Data augmentations
+# Augmentations de données
 # -----------------------------
 
 class RandomRotationZ(object):
@@ -122,6 +124,7 @@ class RandomSphericalOcclusion(object):
         if random.random() >= self.p:
             return pointcloud
 
+        # Supprime localement les points proches d'un centre tiré au hasard.
         out = pointcloud.copy()
         center = out[np.random.randint(0, out.shape[0])]
         d = np.linalg.norm(out - center[None, :], axis=1)
@@ -134,6 +137,7 @@ class RandomSphericalOcclusion(object):
         if kept.shape[0] >= out.shape[0]:
             return kept[: out.shape[0]]
 
+        # Rééchantillonne pour garder un nombre de points constant.
         extra_idx = np.random.choice(kept.shape[0], out.shape[0] - kept.shape[0], replace=True)
         return np.concatenate([kept, kept[extra_idx]], axis=0)
 
@@ -153,7 +157,7 @@ class ToTensor(object):
         return torch.from_numpy(pointcloud.astype(np.float32))
 
 
-
+# Registre d'augmentations composables via une liste de noms.
 AUGMENTATION_REGISTRY = {
     "rot_z": lambda: RandomRotationZ(),
     "noise": lambda: RandomNoise(std=0.02),
@@ -170,13 +174,14 @@ AUGMENTATION_REGISTRY = {
 
 def build_transforms(selected: Optional[List[str]] = None):
     selected = selected or []
+    # L'ordre est important : transformations géométriques/bruit d'abord, tensorisation à la fin.
     ops = [AUGMENTATION_REGISTRY[name]() for name in selected]
     ops.append(ToTensor())
     return transforms.Compose(ops)
 
 
 # -----------------------------
-# Dataset
+# Jeu de données
 # -----------------------------
 
 class PointCloudData(Dataset):
@@ -203,6 +208,7 @@ class PointCloudData(Dataset):
     def __getitem__(self, idx):
         sample = self.files[idx]
         data = read_ply(sample['ply_path'])
+        # Format d'entrée : (N, 3) avant conversion en tenseur torch.
         pointcloud = np.vstack((data['x'], data['y'], data['z'])).T.astype(np.float32)
         pointcloud = self.transforms(pointcloud)
         label = self.classes[sample['category']]
@@ -210,7 +216,7 @@ class PointCloudData(Dataset):
 
 
 # -----------------------------
-# Models
+# Modèles
 # -----------------------------
 
 class PointMLP(nn.Module):
@@ -299,6 +305,7 @@ class Tnet(nn.Module):
         x = torch.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x).reshape(x.size(0), self.k, self.k)
 
+        # Ajoute l'identité pour initialiser près d'une transformation neutre.
         identity = torch.eye(self.k, device=x.device, dtype=x.dtype).unsqueeze(0).repeat(x.size(0), 1, 1)
         return x + identity
 
@@ -331,6 +338,7 @@ class PointNetFull(nn.Module):
 
     def forward(self, x):
         m3x3 = self.tnet1(x)
+        # Aligne le nuage en entrée avant l'extraction des descripteurs.
         x = torch.bmm(m3x3, x)
 
         x = torch.relu(self.bn1(self.conv1(x)))
@@ -347,7 +355,7 @@ class PointNetFull(nn.Module):
 
 
 # -----------------------------
-# Losses
+# Fonctions de perte
 # -----------------------------
 
 def basic_loss(outputs, labels):
@@ -359,15 +367,18 @@ def pointnet_full_loss(outputs, labels, m3x3, alpha=0.001):
     criterion = nn.NLLLoss()
     bsize = outputs.size(0)
     id3x3 = torch.eye(3, device=outputs.device, dtype=outputs.dtype).unsqueeze(0).repeat(bsize, 1, 1)
+    # Régularise la matrice du T-Net pour rester proche d'une transformation orthogonale.
     diff3x3 = id3x3 - torch.bmm(m3x3, m3x3.transpose(1, 2))
     return criterion(outputs, labels) + alpha * torch.norm(diff3x3) / float(bsize)
 
 
 # -----------------------------
-# Training helpers
+# Utilitaires d'entraînement
 # -----------------------------
 
 def forward_with_model(model, x):
+    # Unifie le passage avant pour toutes les variantes.
+    # Le DataLoader donne (B, N, 3), alors que PointNet attend (B, 3, N).
     if isinstance(model, PointMLP):
         out = model(x.transpose(1, 2))
         return out, None
@@ -379,6 +390,7 @@ def forward_with_model(model, x):
 
 
 def evaluate(model, device, loader):
+    # Même fonction pour validation et test final (sans mise à jour des gradients).
     model.eval()
     correct = 0
     total = 0
@@ -426,9 +438,11 @@ def train(model,
             loss.backward()
             optimizer.step()
 
+        # On suit la progression via la validation pour limiter le coût de calcul.
         scheduler.step()
 
         if val_loader is not None:
+            # L'early stopping est piloté uniquement par la validation.
             val_acc = evaluate(model, device, val_loader)
             print(f"Epoch {epoch+1:03d} | loss={loss.item():.4f} | val_acc={val_acc:.2f}%")
 
@@ -444,6 +458,7 @@ def train(model,
                         print(f"Early stopping déclenché à l'epoch {epoch+1}")
                         break
 
+    # Restaure le meilleur état validation avant l'évaluation finale sur le test.
     if best_state is not None:
         model.load_state_dict(best_state)
 
@@ -464,7 +479,10 @@ if __name__ == '__main__':
     full_train_eval_ds = PointCloudData(DATA_ROOT, folder='train', transform=build_transforms(AUGMENTATIONS_VAL))
     test_ds = PointCloudData(DATA_ROOT, folder='test', transform=build_transforms(AUGMENTATIONS_TEST))
 
-    # Split train -> train_sub + val_sub (early stopping sur val, pas sur test)
+    # Protocole :
+    # - train_sub sert à optimiser les poids
+    # - val_sub sert à l'early stopping et au choix du modèle
+    # - test est évalué une seule fois à la fin
     rng = np.random.RandomState(SPLIT_SEED)
     indices = np.arange(len(full_train_ds))
     rng.shuffle(indices)
@@ -479,7 +497,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_ds, batch_size=32, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=32, shuffle=False)
 
-    # Choix du modèle: PointMLP | PointNetBasic | PointNetFull
+    # Choix du modèle : PointMLP | PointNetBasic | PointNetFull
     MODEL_NAME = "PointNetFull"
     classes = len(full_train_ds.classes)
 
@@ -490,7 +508,7 @@ if __name__ == '__main__':
     elif MODEL_NAME == "PointNetFull":
         model = PointNetFull(classes=classes)
     else:
-        raise ValueError(f"Unknown model: {MODEL_NAME}")
+        raise ValueError(f"Modèle inconnu : {MODEL_NAME}")
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
